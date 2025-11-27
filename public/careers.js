@@ -43,7 +43,6 @@ function renderPositions(positions = []) {
 function renderDetail(position) {
   if (!jobDetailEl) return;
   const description = position.description || 'No description provided.';
-  const requirements = position.requirements || 'No specific requirements listed.';
   const meta = [position.department, position.location].filter(Boolean).join(' · ');
   jobDetailEl.innerHTML = `
     <div class="flex items-start justify-between gap-3 mb-6 flex-wrap">
@@ -58,10 +57,6 @@ function renderDetail(position) {
       <div>
         <h4 class="text-lg font-semibold mb-2">Job Description</h4>
         <p class="text-gray-700 whitespace-pre-line leading-relaxed">${description}</p>
-      </div>
-      <div>
-        <h4 class="text-lg font-semibold mb-2">Requirements</h4>
-        <p class="text-gray-700 whitespace-pre-line leading-relaxed">${requirements}</p>
       </div>
       <div class="border-t pt-6">
         <h4 class="text-lg font-semibold mb-4">Apply for this role</h4>
