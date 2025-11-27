@@ -21,6 +21,7 @@ const {
 } = require('./pairingStore');
 const recruitmentOpenApiSpec = require('./api/recruitmentopenAI');
 const hrPositionsRoutes = require('./api/hrPositions');
+const hrAiInterviewRoutes = require('./api/hrAiInterview');
 const publicCareersRoutes = require('./api/publicCareers');
 
 const app = express();
@@ -1525,6 +1526,7 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/hr', hrPositionsRoutes);
+app.use('/api/hr', hrAiInterviewRoutes);
 app.use('/api/public', publicCareersRoutes);
 
 app.get('/careers', (req, res) => {
@@ -2454,6 +2456,9 @@ init().then(async () => {
     await db.read();
     const { positionId } = req.query;
     db.data.candidates = db.data.candidates || [];
+    const recruitmentApplications = Array.isArray(db.data.recruitmentApplications)
+      ? db.data.recruitmentApplications
+      : [];
     let list = db.data.candidates;
     if (positionId) {
       list = list.filter(
@@ -2468,13 +2473,34 @@ init().then(async () => {
       const cv = buildCandidateCvSummary(c);
       const id = resolveCandidateId(c);
       const contact = c.contact || c.email || c.phone || '';
+      const application = recruitmentApplications.find(app => {
+        const appCandidateId = app?.candidateId?.toString?.();
+        const appLegacyId = app?.candidateLegacyId;
+        const matchesCandidate =
+          (appCandidateId && c?._id && appCandidateId === c._id.toString()) ||
+          (appLegacyId != null && c?.id != null && String(appLegacyId) === String(c.id));
+        if (!matchesCandidate) return false;
+
+        if (!positionId) return true;
+
+        const appPositionId = app?.positionId?.toString?.();
+        const appLegacyPositionId = app?.positionLegacyId;
+        return (
+          (appPositionId && appPositionId === positionId) ||
+          (appLegacyPositionId != null && String(appLegacyPositionId) === String(positionId))
+        );
+      });
+      const applicationId = application?._id?.toString?.();
       return {
         ...rest,
         id,
         contact,
         commentCount: comments.length,
         cv: cv ? { filename: cv.filename, contentType: cv.contentType } : null,
-        source: c.source || null
+        source: c.source || null,
+        applicationId,
+        applicationStatus: application?.status || null,
+        applicationCreatedAt: application?.createdAt || null
       };
     });
     res.json(sanitized);
