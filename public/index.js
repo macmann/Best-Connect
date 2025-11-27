@@ -2843,6 +2843,13 @@ function renderRecruitmentCandidates() {
     const sourceLabel = candidate.source
       ? `<div class="text-muted" style="font-size:12px;">Source: ${escapeHtml(formatCandidateSource(candidate.source))}</div>`
       : '';
+    const aiInterviewButton = candidate.applicationId && candidate.positionId
+      ? `
+            <button type="button" class="md-button md-button--text md-button--small" data-action="send-ai-interview" data-application-id="${candidate.applicationId}" data-candidate-id="${candidate.id}">
+              <span class="material-symbols-rounded">smart_toy</span>
+              Send AI Interview
+            </button>`
+      : '';
     return `
       <tr>
         <td>
@@ -2863,6 +2870,7 @@ function renderRecruitmentCandidates() {
         </td>
         <td>
           <div class="candidate-actions">
+            ${aiInterviewButton}
             <button type="button" class="md-button md-button--text md-button--small" data-action="edit-candidate" data-candidate-id="${candidate.id}">
               <span class="material-symbols-rounded">edit</span>
               Edit
@@ -3285,6 +3293,14 @@ async function onCandidateStatusChange(ev) {
 }
 
 async function onCandidateTableClick(ev) {
+  const aiInterviewBtn = ev.target.closest('[data-action="send-ai-interview"]');
+  if (aiInterviewBtn) {
+    const applicationId = aiInterviewBtn.getAttribute('data-application-id');
+    if (applicationId) {
+      await createAiInterviewSession(applicationId, aiInterviewBtn);
+    }
+    return;
+  }
   const deleteBtn = ev.target.closest('[data-action="delete-candidate"]');
   if (deleteBtn) {
     const id = Number(deleteBtn.getAttribute('data-candidate-id'));
@@ -3309,6 +3325,35 @@ async function onCandidateTableClick(ev) {
   const id = Number(detailsButton.getAttribute('data-candidate-id'));
   if (!id) return;
   openCandidateDetailsModal(id);
+}
+
+async function createAiInterviewSession(applicationId, triggerButton) {
+  if (!applicationId) return;
+  const button = triggerButton || null;
+  if (button) button.disabled = true;
+  try {
+    const res = await apiFetch('/api/hr/ai-interview/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ applicationId })
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      const message = data?.error || 'Failed to create AI interview session.';
+      throw new Error(message);
+    }
+    const path = data?.interviewPath || '';
+    const candidateEmail = data?.candidateEmail || '';
+    const details = [];
+    if (path) details.push(`Link: ${path}`);
+    if (candidateEmail) details.push(`Candidate Email: ${candidateEmail}`);
+    const info = details.length ? `\n${details.join('\n')}` : '';
+    alert(`AI Interview session created.${info}`);
+  } catch (err) {
+    alert(err?.message || 'Failed to create AI interview session.');
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 async function downloadCandidateCv(id) {
