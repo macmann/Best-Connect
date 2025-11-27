@@ -14,7 +14,7 @@ async function fetchJson(url, options = {}) {
 function renderPositions(positions = []) {
   if (!jobListEl) return;
   if (!Array.isArray(positions) || !positions.length) {
-    jobListEl.innerHTML = '<p class="text-gray-600">No openings are published right now. Please check back soon.</p>';
+    jobListEl.innerHTML = '<p class="text-gray-600 text-center">No openings are published right now. Please check back soon.</p>';
     return;
   }
 
@@ -25,13 +25,15 @@ function renderPositions(positions = []) {
       if (position.location) metaParts.push(position.location);
       const meta = metaParts.length ? metaParts.join(' • ') : 'Brillar';
       return `
-        <div class="bg-white rounded-lg p-4 shadow flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="bg-white rounded-xl shadow p-5 flex items-start sm:items-center justify-between gap-4">
           <div>
-            <div class="text-lg font-semibold">${position.title}</div>
-            <div class="text-sm text-gray-500">${meta}</div>
-            ${position.employmentType ? `<div class="text-xs text-gray-400 mt-1">${position.employmentType}</div>` : ''}
+            <h2 class="text-lg font-semibold text-gray-900">${position.title}</h2>
+            <p class="text-sm text-gray-500 mt-1">${meta}</p>
+            ${position.employmentType ? `<p class="text-xs text-gray-400 mt-1">${position.employmentType}</p>` : ''}
           </div>
-          <button class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 focus:outline-none" data-action="view" data-id="${position._id}">View &amp; Apply</button>
+          <div class="flex items-center gap-3">
+            <button class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-semibold hover:bg-blue-700 focus:outline-none" data-action="view" data-id="${position._id}">View &amp; Apply</button>
+          </div>
         </div>
       `;
     })
@@ -42,11 +44,12 @@ function renderDetail(position) {
   if (!jobDetailEl) return;
   const description = position.description || 'No description provided.';
   const requirements = position.requirements || 'No specific requirements listed.';
+  const meta = [position.department, position.location].filter(Boolean).join(' · ');
   jobDetailEl.innerHTML = `
-    <div class="flex items-start justify-between gap-3 mb-4 flex-wrap">
+    <div class="flex items-start justify-between gap-3 mb-6 flex-wrap">
       <div>
-        <h3 class="text-2xl font-bold text-blue-700">${position.title}</h3>
-        <div class="text-gray-600">${position.department || ''}${position.department && position.location ? ' • ' : ''}${position.location || ''}</div>
+        <h3 class="text-3xl font-bold text-gray-900">${position.title}</h3>
+        <div class="text-gray-600 mt-1">${meta || 'Brillar'}</div>
         ${position.employmentType ? `<div class="text-sm text-gray-500">${position.employmentType}</div>` : ''}
       </div>
       <div class="text-sm text-gray-500">${new Date(position.createdAt || Date.now()).toLocaleDateString()}</div>
@@ -54,39 +57,39 @@ function renderDetail(position) {
     <div class="space-y-6">
       <div>
         <h4 class="text-lg font-semibold mb-2">Job Description</h4>
-        <p class="text-gray-700 whitespace-pre-line">${description}</p>
+        <p class="text-gray-700 whitespace-pre-line leading-relaxed">${description}</p>
       </div>
       <div>
         <h4 class="text-lg font-semibold mb-2">Requirements</h4>
-        <p class="text-gray-700 whitespace-pre-line">${requirements}</p>
+        <p class="text-gray-700 whitespace-pre-line leading-relaxed">${requirements}</p>
       </div>
       <div class="border-t pt-6">
         <h4 class="text-lg font-semibold mb-4">Apply for this role</h4>
-        <form id="apply-form" class="space-y-4" data-id="${position._id}">
+        <form id="apply-form" class="space-y-4 mt-4" data-id="${position._id}">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
-            <input name="fullName" required class="w-full border rounded px-3 py-2" placeholder="Your full name" />
+            <input name="fullName" required class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Your full name" />
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-              <input type="email" name="email" required class="w-full border rounded px-3 py-2" placeholder="you@example.com" />
+              <input type="email" name="email" required class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="you@example.com" />
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
-              <input type="tel" name="phone" required class="w-full border rounded px-3 py-2" placeholder="(+1) 555-1234" />
+              <input type="tel" name="phone" required class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="(+63) 900 000 0000" />
             </div>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">CV (PDF, DOC, DOCX) *</label>
-            <input type="file" name="cv" accept=".pdf,.doc,.docx" required class="w-full border rounded px-3 py-2 bg-white" />
+            <input type="file" name="cv" accept=".pdf,.doc,.docx" required class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Cover Letter</label>
-            <textarea name="coverLetterText" rows="4" class="w-full border rounded px-3 py-2" placeholder="Optional"></textarea>
+            <textarea name="coverLetterText" rows="4" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Optional"></textarea>
           </div>
           <div id="apply-message" class="text-sm"></div>
-          <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 focus:outline-none">Submit Application</button>
+          <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-semibold hover:bg-blue-700 focus:outline-none">Submit Application</button>
         </form>
       </div>
     </div>
@@ -99,7 +102,7 @@ async function loadPositions() {
     renderPositions(positions);
   } catch (error) {
     if (jobListEl) {
-      jobListEl.innerHTML = '<p class="text-red-600">Unable to load positions right now. Please try again later.</p>';
+      jobListEl.innerHTML = '<p class="text-red-600 text-center">Unable to load positions right now. Please try again later.</p>';
     }
   }
 }
@@ -162,6 +165,17 @@ if (jobDetailEl) {
   jobDetailEl.addEventListener('submit', event => {
     if (event.target && event.target.id === 'apply-form') {
       submitApplication(event);
+    }
+  });
+}
+
+const openPositionsButton = document.getElementById('view-open-positions');
+if (openPositionsButton) {
+  openPositionsButton.addEventListener('click', event => {
+    event.preventDefault();
+    const section = document.getElementById('open-positions');
+    if (section) {
+      section.scrollIntoView({ behavior: 'smooth' });
     }
   });
 }
