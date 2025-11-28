@@ -3239,6 +3239,7 @@ async function loadCandidateSearchCvPreview(candidateId) {
   const messageEl = document.getElementById('candidateCvModalMessage');
   if (!iframe || !messageEl) return;
   const normalizedId = normalizeCandidateId(candidateId);
+  const cacheKey = normalizedId == null ? null : String(normalizedId);
   if (normalizedId == null) {
     resetCandidateCvModal('Unable to load this CV.');
     return;
@@ -3253,14 +3254,14 @@ async function loadCandidateSearchCvPreview(candidateId) {
     if (!res.ok) throw new Error('Failed');
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
-    if (candidateCvModalCandidateId !== normalizedId) {
+    if (candidateCvModalCandidateId !== cacheKey) {
       URL.revokeObjectURL(url);
       return;
     }
-    candidateCvPreviewUrls.set(normalizedId, url);
+    if (cacheKey != null) candidateCvPreviewUrls.set(cacheKey, url);
     setCandidateCvModalUrl(url);
   } catch (err) {
-    if (candidateCvModalCandidateId !== normalizedId) return;
+    if (candidateCvModalCandidateId !== cacheKey) return;
     resetCandidateCvModal('Unable to load CV preview right now. Use the download button to access the CV.');
   }
 }
@@ -3271,7 +3272,12 @@ function openCandidateCvModal(candidateId) {
   const candidate = recruitmentCandidateSearchResults.find(c => String(c.id) === String(candidateId));
   if (!candidate) return;
   const normalizedId = normalizeCandidateId(candidate.id);
-  candidateCvModalCandidateId = normalizedId;
+  const cacheKey = normalizedId == null ? null : String(normalizedId);
+  if (cacheKey == null) {
+    resetCandidateCvModal('Unable to load this CV.');
+    return;
+  }
+  candidateCvModalCandidateId = cacheKey;
   modal.classList.remove('hidden');
   const titleText = document.getElementById('candidateCvModalTitleText');
   if (titleText) {
@@ -3293,7 +3299,7 @@ function openCandidateCvModal(candidateId) {
     resetCandidateCvModal('CV preview is available only for PDF files. Use the download button to open this document.');
     return;
   }
-  const cachedUrl = candidateCvPreviewUrls.get(normalizedId);
+  const cachedUrl = cacheKey != null ? candidateCvPreviewUrls.get(cacheKey) : null;
   if (cachedUrl) {
     setCandidateCvModalUrl(cachedUrl);
     return;
@@ -3555,11 +3561,12 @@ async function loadCandidateCvPreview(candidate) {
   const iframe = document.getElementById('candidateCvIframe');
   if (!messageEl || !iframe) return;
   const candidateId = normalizeCandidateId(candidate.id);
+  const cacheKey = candidateId == null ? null : String(candidateId);
   if (candidateId == null) {
     resetCandidateCvPreview('Unable to load this CV.');
     return;
   }
-  const cachedUrl = candidateCvPreviewUrls.get(candidateId);
+  const cachedUrl = cacheKey != null ? candidateCvPreviewUrls.get(cacheKey) : null;
   if (cachedUrl) {
     setCandidateCvPreviewUrl(cachedUrl);
     return;
@@ -3574,7 +3581,7 @@ async function loadCandidateCvPreview(candidate) {
     if (!res.ok) throw new Error('Failed');
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
-    candidateCvPreviewUrls.set(candidateId, url);
+    if (cacheKey != null) candidateCvPreviewUrls.set(cacheKey, url);
     if (recruitmentActiveDetailsCandidateId !== candidate.id) return;
     setCandidateCvPreviewUrl(url);
   } catch (err) {
