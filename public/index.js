@@ -17,6 +17,8 @@ const employeeGridState = {
 let companyHolidays = [];
 let holidaysLoaded = false;
 let holidaysLoading = null;
+let managerOptionsCache = null;
+let managerOptionsPromise = null;
 
 const POST_LOGIN_API_BASE = 'https://api-qa.atenxion.ai';
 const POST_LOGIN_PATH = '/api/post-login/user-login';
@@ -110,6 +112,28 @@ function timeoutFetch(url, options, ms) {
   const opts = { ...(options || {}), signal: controller.signal };
 
   return fetch(url, opts).finally(() => clearTimeout(timer));
+}
+
+async function fetchManagerOptions() {
+  if (managerOptionsCache) return managerOptionsCache;
+  if (managerOptionsPromise) return managerOptionsPromise;
+
+  managerOptionsPromise = (async () => {
+    try {
+      const res = await apiFetch('/api/manager-users');
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && Array.isArray(data.managers)) {
+        managerOptionsCache = data.managers;
+        return managerOptionsCache;
+      }
+    } catch (err) {
+      console.error('Failed to load manager options', err);
+    }
+    managerOptionsCache = [];
+    return managerOptionsCache;
+  })();
+
+  return managerOptionsPromise;
 }
 
 function queuePostLoginSync(employeeId) {
@@ -5072,7 +5096,14 @@ async function loadEmployeesManage() {
   const roleKey = findKey(['role', 'position']);
   const titleKey = findKey(['title', 'jobtitle', 'job title']);
   const emailKey = findKey(['email', 'work email']);
-  const supervisorKey = findKey(['supervisor', 'manager', 'reportingmanager', 'reporting manager']);
+  const supervisorKey = findKey([
+    'supervisor',
+    'manager',
+    'reportingmanager',
+    'reporting manager',
+    'appraiser',
+    'appariser'
+  ]);
   const departmentKey = findKey(['department', 'dept']);
   const joinDateKey = findKey(['joindate', 'joiningdate', 'startdate', 'date of joining']);
   const employeeIdKey = findKey(['employeeid', 'employee_id', 'empid']);
@@ -5861,6 +5892,34 @@ function buildEmployeePayload(formEl, fields = []) {
       delete payload[key];
     });
   }
+
+  const managerFieldKeys = Array.isArray(fields)
+    ? fields
+        .filter(field => {
+          if (!field || !field.key) return false;
+          const normalized = String(field.key).toLowerCase();
+          return (
+            normalized.includes('supervisor') ||
+            normalized.includes('manager') ||
+            normalized.includes('reporting') ||
+            normalized.includes('appraiser') ||
+            normalized.includes('appariser')
+          );
+        })
+        .map(field => field.key)
+    : [];
+
+  const uniqueManagerKeys = Array.from(new Set(managerFieldKeys));
+  if (uniqueManagerKeys.length > 1) {
+    const primaryValue = uniqueManagerKeys
+      .map(key => payload[key])
+      .find(value => value !== undefined && value !== null && String(value).trim() !== '');
+    if (primaryValue !== undefined) {
+      uniqueManagerKeys.forEach(key => {
+        payload[key] = primaryValue;
+      });
+    }
+  }
   return payload;
 }
 
@@ -5937,6 +5996,19 @@ async function getDynamicEmployeeFields() {
       leaveFields.push({key:k,label:k.charAt(0).toUpperCase()+k.slice(1)+' Leave',type:'number',required:false,isLeaveBalance:true});
     });
   }
+  const managerOptions = await fetchManagerOptions();
+  const managerSelectOptions = Array.isArray(managerOptions)
+    ? managerOptions
+        .map(opt => {
+          const labelParts = [];
+          if (opt?.name) labelParts.push(opt.name);
+          if (opt?.email) labelParts.push(opt.email);
+          const label = labelParts.length ? labelParts.join(' • ') : 'Manager';
+          const value = opt?.email || opt?.employeeId || opt?.name || '';
+          return value ? { value, label } : null;
+        })
+        .filter(Boolean)
+    : [];
   const requiredFields = ['name', 'title', 'country/city'];
   let normalFields = Object.keys(sample)
     .filter(k => k !== 'id' && k !== 'leaveBalances' && !(typeof k === 'string' && k.startsWith('_')))
@@ -5944,6 +6016,24 @@ async function getDynamicEmployeeFields() {
       let isRequired = requiredFields.includes(k.toLowerCase());
       const keyLower = k.toLowerCase();
       const baseLabel = k.charAt(0).toUpperCase()+k.slice(1);
+      if (
+        keyLower.includes('supervisor') ||
+        keyLower.includes('manager') ||
+        keyLower.includes('reporting') ||
+        keyLower.includes('appraiser') ||
+        keyLower.includes('appariser')
+      ) {
+        if (managerSelectOptions.length) {
+          return {
+            key: k,
+            label: 'Supervisor / Appraiser',
+            type: 'select',
+            options: managerSelectOptions,
+            required: isRequired
+          };
+        }
+        return { key: k, label: 'Supervisor / Appraiser', type: 'text', required: isRequired };
+      }
       if (keyLower === 'status') {
         const baseOptions = ['Active', 'Inactive'];
         const sampleValue = sample[k];

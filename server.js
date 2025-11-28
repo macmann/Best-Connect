@@ -603,7 +603,7 @@ function buildRecipientOptions(data, extras = []) {
   const employees = Array.isArray(data?.employees) ? data.employees : [];
   const users = Array.isArray(data?.users) ? data.users : [];
 
-  const addOption = (email, name = '') => {
+  const addOption = (email, name = '', employeeId = null) => {
     if (!email) return;
     const trimmedEmail = typeof email === 'string' ? email.trim() : String(email || '').trim();
     if (!trimmedEmail) return;
@@ -613,9 +613,12 @@ function buildRecipientOptions(data, extras = []) {
       if (!existing.name && name) {
         existing.name = name;
       }
+      if (!existing.employeeId && employeeId) {
+        existing.employeeId = employeeId;
+      }
       return;
     }
-    options.set(lower, { email: trimmedEmail, name: name || '' });
+    options.set(lower, { email: trimmedEmail, name: name || '', employeeId: employeeId ?? null });
   };
 
   users
@@ -630,7 +633,7 @@ function buildRecipientOptions(data, extras = []) {
           name = String(emp.name).trim();
         }
       }
-      addOption(email, name);
+      addOption(email, name, user.employeeId || null);
     });
 
   employees
@@ -638,11 +641,18 @@ function buildRecipientOptions(data, extras = []) {
     .forEach(emp => {
       const email = getEmpEmail(emp);
       const name = emp?.name ? String(emp.name).trim() : '';
-      addOption(email, name);
+      addOption(email, name, emp?.id ?? null);
     });
 
   const extraList = Array.isArray(extras) ? extras : [];
-  extraList.forEach(email => addOption(email));
+  extraList.forEach(extra => {
+    if (!extra) return;
+    if (typeof extra === 'string') {
+      addOption(extra);
+      return;
+    }
+    addOption(extra.email, extra.name, extra.employeeId);
+  });
 
   if (ADMIN_EMAIL) {
     addOption(ADMIN_EMAIL, 'Administrator');
@@ -661,6 +671,76 @@ function buildRecipientOptions(data, extras = []) {
     }
     return a.email.toLowerCase().localeCompare(b.email.toLowerCase());
   });
+}
+
+function resolveEmployeeManagers(employee, data = {}) {
+  const employees = Array.isArray(data?.employees) ? data.employees : [];
+  const users = Array.isArray(data?.users) ? data.users : [];
+  const recipients = new Map();
+
+  const addRecipient = (email, name = '', employeeId = null) => {
+    if (!email) return;
+    const trimmedEmail = typeof email === 'string' ? email.trim() : String(email || '').trim();
+    if (!trimmedEmail) return;
+    const lower = trimmedEmail.toLowerCase();
+    if (recipients.has(lower)) {
+      const existing = recipients.get(lower);
+      if (!existing.name && name) {
+        existing.name = name;
+      }
+      if (!existing.employeeId && employeeId) {
+        existing.employeeId = employeeId;
+      }
+      return;
+    }
+    recipients.set(lower, { email: trimmedEmail, name: name || '', employeeId: employeeId ?? null });
+  };
+
+  const rawManager = findValueByKeywords(employee, [
+    'appraiser',
+    'appariser',
+    'manager',
+    'supervisor',
+    'reporting'
+  ]);
+
+  const managerCandidates = rawManager
+    ? rawManager
+        .split(/[\\/,&;]+/)
+        .map(value => (value && typeof value === 'string' ? value.trim() : String(value || '').trim()))
+        .filter(Boolean)
+    : [];
+
+  const addFromEmployeeRecord = emp => {
+    if (!emp) return;
+    const email = getEmpEmail(emp);
+    if (!email) return;
+    const userMatch = users.find(user => user && user.employeeId == emp.id) || null;
+    const name = emp?.name ? String(emp.name).trim() : '';
+    addRecipient(email, name, emp?.id ?? userMatch?.employeeId ?? null);
+  };
+
+  managerCandidates.forEach(candidate => {
+    if (!candidate) return;
+    const lowerCandidate = candidate.toLowerCase();
+    if (lowerCandidate.includes('@')) {
+      const userMatch = users.find(user => typeof user?.email === 'string' && user.email.toLowerCase() === lowerCandidate);
+      const employeeMatch = employees.find(emp => getEmpEmail(emp).toLowerCase() === lowerCandidate);
+      const name = employeeMatch?.name || userMatch?.name || candidate;
+      const employeeId = userMatch?.employeeId || employeeMatch?.id || null;
+      addRecipient(candidate, name, employeeId);
+      return;
+    }
+
+    const matchedEmployee = employees.find(emp =>
+      typeof emp?.name === 'string' && emp.name.trim().toLowerCase() === lowerCandidate
+    );
+    if (matchedEmployee) {
+      addFromEmployeeRecord(matchedEmployee);
+    }
+  });
+
+  return Array.from(recipients.values());
 }
 
 function normalizeNumberKey(key = '') {
@@ -3907,18 +3987,36 @@ init().then(async () => {
     await db.write();
 
     const emailConfig = await loadEmailSettings();
-    let recipientEmails = Array.isArray(emailConfig?.recipients)
-      ? emailConfig.recipients.filter(Boolean)
-      : [];
-    if (!recipientEmails.length) {
+    const recipientSet = new Set();
+    const addRecipients = list => {
+      (list || []).forEach(value => {
+        if (!value) return;
+        const email = typeof value === 'string' ? value : value?.email;
+        if (!email) return;
+        const normalized = email.toString().trim().toLowerCase();
+        if (normalized) {
+          recipientSet.add(normalized);
+        }
+      });
+    };
+
+    const managerRecipients = resolveEmployeeManagers(employee, db.data);
+    addRecipients(managerRecipients.map(manager => manager?.email));
+    addRecipients(emailConfig?.recipients);
+
+    if (!recipientSet.size) {
       const managers = db.data.users.filter(u => isManagerRole(u?.role));
-      recipientEmails = managers.map(m => m.email).filter(Boolean);
+      addRecipients(managers.map(m => m.email));
     }
+
     const empEmail = getEmpEmail(employee);
     const name = employee?.name || empEmail || `Employee ${employeeId}`;
-    if (!recipientEmails.length && ADMIN_EMAIL) {
-      recipientEmails = [ADMIN_EMAIL];
+
+    if (!recipientSet.size && ADMIN_EMAIL) {
+      recipientSet.add(ADMIN_EMAIL.toLowerCase());
     }
+
+    const recipientEmails = Array.from(recipientSet.values());
     if (recipientEmails.length) {
       await sendEmail(
         recipientEmails,
@@ -4092,6 +4190,17 @@ init().then(async () => {
     }
 
     res.status(result.status).json(result.data);
+  });
+
+  app.get('/api/manager-users', authRequired, managerOnly, async (_req, res) => {
+    await db.read();
+    const managers = buildRecipientOptions(db.data).map(option => ({
+      email: option.email,
+      name: option.name || '',
+      employeeId: option.employeeId || null
+    }));
+
+    res.json({ managers });
   });
 
   app.get('/api/leave-summary', authRequired, async (req, res) => {
