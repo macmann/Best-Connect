@@ -1,4 +1,10 @@
-const pdfParse = require("pdf-parse");
+const pdfParseModule = require("pdf-parse");
+
+// Support both CommonJS and ESM-style default export
+const pdfParse =
+  typeof pdfParseModule === "function"
+    ? pdfParseModule
+    : pdfParseModule.default;
 const fs = require("fs");
 const path = require("path");
 
