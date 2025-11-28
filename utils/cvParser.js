@@ -1,33 +1,50 @@
-const fs = require('fs');
-const path = require('path');
-const pdfParse = require('pdf-parse');
+const pdfParse = require("pdf-parse");
+const fs = require("fs");
+const path = require("path");
 
-function resolveCvPath(filePath) {
-  const resolvedPath = path.resolve(filePath);
-  if (fs.existsSync(resolvedPath)) {
-    return resolvedPath;
+function resolveCvPath(cvPath) {
+  if (!cvPath) {
+    throw new Error("No CV path provided");
   }
 
-  const trimmedPath = filePath.replace(/^[/\\]+/, '');
-  const fallbackPath = path.join(__dirname, '..', trimmedPath);
-  if (fs.existsSync(fallbackPath)) {
-    return fallbackPath;
+  // Normalize cvPath (remove leading / if it's like "/uploads/...")
+  let normalized = cvPath.trim();
+  if (normalized.startsWith("/")) {
+    normalized = normalized.substring(1);
   }
 
-  throw new Error(`CV file not found at ${resolvedPath}`);
+  // Base dir is project src root (one level up from utils/)
+  const baseDir = path.join(__dirname, "..");
+
+  // Try a few common locations:
+  // 1) as-is relative to baseDir (e.g. "uploads/cv/..." )
+  let candidatePaths = [
+    path.join(baseDir, normalized),
+    path.join(baseDir, "public", normalized) // e.g. "public/uploads/cv/..."
+  ];
+
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) {
+      return p;
+    }
+  }
+
+  // If still not found, log and throw with full paths we checked
+  console.error("CV file not found. Tried paths:", candidatePaths);
+  throw new Error("CV file not found at " + candidatePaths.join(" OR "));
 }
 
-async function extractTextFromPdf(filePath) {
-  const resolvedPath = resolveCvPath(filePath);
-  const fileBuffer = await fs.promises.readFile(resolvedPath);
-  const ext = path.extname(resolvedPath).toLowerCase();
+async function extractTextFromPdf(cvPath) {
+  const absolutePath = resolveCvPath(cvPath);
 
-  if (ext === '.pdf') {
-    const parsed = await pdfParse(fileBuffer);
-    return parsed.text || '';
+  try {
+    const buffer = fs.readFileSync(absolutePath);
+    const result = await pdfParse(buffer);
+    return result.text || "";
+  } catch (err) {
+    console.error("PDF parsing failed at", absolutePath, err);
+    throw err;
   }
-
-  return fileBuffer.toString('utf8');
 }
 
-module.exports = { extractTextFromPdf, resolveCvPath };
+module.exports = { extractTextFromPdf };

@@ -223,11 +223,7 @@ router.post('/positions/:id/apply', upload.single('cv'), async (req, res) => {
       _id: applicationResult.insertedId
     };
 
-    const cvAbsolutePath = path.isAbsolute(savedApplication.cvFilePath)
-      ? savedApplication.cvFilePath
-      : path.join(__dirname, '..', savedApplication.cvFilePath);
-
-    const cvText = await extractTextFromPdf(cvAbsolutePath);
+    const cvText = await extractTextFromPdf(savedApplication.cvFilePath || savedApplication.cvPath);
     const positionForScreening = await db
       .collection('positions')
       .findOne({ _id: new ObjectId(positionId) });

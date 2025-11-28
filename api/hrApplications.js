@@ -1,5 +1,4 @@
 const express = require('express');
-const path = require('path');
 const { ObjectId } = require('mongodb');
 const { getDatabase } = require('../db');
 const { extractTextFromPdf } = require('../utils/cvParser');
@@ -55,13 +54,10 @@ router.post('/applications/:applicationId/ai-screening/run', async (req, res) =>
       return res.status(400).json({ success: false, error: 'cv_not_found_for_application' });
     }
 
-    const cvAbsolutePath = path.isAbsolute(application.cvFilePath)
-      ? application.cvFilePath
-      : path.join(__dirname, '..', application.cvFilePath);
-
     let cvText;
     try {
-      cvText = await extractTextFromPdf(cvAbsolutePath);
+      console.log('Application CV path:', application.cvFilePath || application.cvPath);
+      cvText = await extractTextFromPdf(application.cvFilePath || application.cvPath);
     } catch (err) {
       console.error('Failed to extract text from CV for manual screening:', err);
       return res.status(500).json({ success: false, error: 'failed_to_read_cv' });
