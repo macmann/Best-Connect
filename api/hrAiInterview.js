@@ -131,7 +131,7 @@ router.post('/ai-interview/sessions', async (req, res) => {
       applicationId: application._id,
       candidateId: candidate._id,
       positionId: position._id,
-      status: 'pending',
+      status: 'sent',
       templateTitle: position.title || 'AI Interview',
       aiInterviewQuestions: questions,
       answers: [],

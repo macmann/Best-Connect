@@ -5,6 +5,8 @@ const { analyzeInterviewResponses } = require('../openaiClient');
 
 const router = express.Router();
 
+const DEFAULT_RECRUITER_EMAIL = process.env.RECRUITER_NOTIFICATION_EMAIL || process.env.ADMIN_EMAIL || null;
+
 function normalizeObjectId(id) {
   if (!id) return null;
   try {
@@ -41,6 +43,48 @@ function mapQuestions(questions) {
     id: deriveQuestionId(q, index),
     text: q.text || q.question || ''
   }));
+}
+
+function buildRecruiterNotificationLines({ candidateName, positionTitle, candidateEmail, result }) {
+  const lines = [
+    'Hi team,',
+    `${candidateName || 'The candidate'} has completed the AI interview for ${positionTitle || 'the position'}.`,
+    result?.verdict ? `Verdict: ${result.verdict}` : 'Verdict: Not provided.'
+  ];
+
+  const scores = result?.scores || {};
+  const scoreLines = [];
+  if (scores.overall != null) scoreLines.push(`Overall: ${scores.overall} / 5`);
+  if (scores.communication != null) scoreLines.push(`Communication: ${scores.communication}`);
+  if (scores.technical != null) scoreLines.push(`Technical: ${scores.technical}`);
+  if (scores.cultureFit != null) scoreLines.push(`Culture Fit: ${scores.cultureFit}`);
+
+  if (scoreLines.length) {
+    lines.push('', 'Scores:', ...scoreLines);
+  }
+
+  if (candidateEmail) {
+    lines.push('', `Candidate email: ${candidateEmail}`);
+  }
+
+  lines.push('', 'Review the full feedback in the HR Portal to move the candidate forward.');
+  return lines;
+}
+
+async function notifyRecruiterOfCompletion(req, { candidateName, positionTitle, candidateEmail, result }) {
+  const sendEmail = req.app?.locals?.sendEmail;
+  if (typeof sendEmail !== 'function' || !DEFAULT_RECRUITER_EMAIL) return false;
+
+  const subject = `AI interview completed: ${candidateName || 'Candidate'}`;
+  const body = buildRecruiterNotificationLines({ candidateName, positionTitle, candidateEmail, result }).join('\n');
+
+  try {
+    await sendEmail(DEFAULT_RECRUITER_EMAIL, subject, body);
+    return true;
+  } catch (err) {
+    console.error('Failed to notify recruiter about AI interview completion:', err);
+    return false;
+  }
 }
 
 router.get('/ai-interview/:token', async (req, res) => {
@@ -145,10 +189,14 @@ router.post('/ai-interview/:token/submit', async (req, res) => {
     const candidate = await db.collection('candidates').findOne({ _id: updatedSession.candidateId });
     const position = await db.collection('positions').findOne({ _id: updatedSession.positionId });
 
+    const candidateName = buildCandidateName(candidate) || candidate?.fullName || candidate?.name;
+    const positionTitle = position?.title || updatedSession.positionTitle;
+    const candidateEmail = candidate?.email || null;
+
     const payload = {
-      positionTitle: position?.title,
+      positionTitle,
       positionDescription: position?.description,
-      candidateName: buildCandidateName(candidate) || candidate?.fullName || candidate?.name,
+      candidateName,
       questions: updatedSession.aiInterviewQuestions,
       answers: updatedSession.answers,
     };
@@ -184,6 +232,13 @@ router.post('/ai-interview/:token/submit', async (req, res) => {
       { _id: updatedSession._id },
       { $set: { aiResultId: insertResult.insertedId } }
     );
+
+    await notifyRecruiterOfCompletion(req, {
+      candidateName,
+      positionTitle,
+      candidateEmail,
+      result: result || {}
+    });
 
     return res.json({ success: true, aiAnalysisQueued: true });
   } catch (err) {

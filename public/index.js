@@ -3754,9 +3754,30 @@ function refreshCandidateDetailsModal() {
 }
 
 function formatAiInterviewStatus(info) {
-  if (!info || info.hasSession === false) return 'Not sent';
-  if (info.result) return 'Completed';
-  return 'Pending';
+  if (!info || info.hasSession === false) {
+    return { label: 'Not sent', description: 'Send the AI interview to notify the candidate.' };
+  }
+
+  const sessionStatus = info.session?.status;
+
+  if (info.result) {
+    return {
+      label: 'Completed',
+      description: 'Candidate completed the AI interview and analysis is ready.'
+    };
+  }
+
+  if (sessionStatus === 'completed') {
+    return {
+      label: 'Completed',
+      description: 'Candidate finished their interview. AI analysis will appear once ready.'
+    };
+  }
+
+  return {
+    label: 'AI Interview Sent',
+    description: 'Waiting for the candidate to finish the interview.'
+  };
 }
 
 function renderCandidateAiInterviewPanel(candidate, options = {}) {
@@ -3804,25 +3825,62 @@ function renderCandidateAiInterviewPanel(candidate, options = {}) {
     return;
   }
 
-  const statusLabel = formatAiInterviewStatus(data);
-  const statusParts = [`Status: ${statusLabel}`];
-  if (data.result?.verdict) statusParts.push(`Verdict: ${escapeHtml(data.result.verdict)}`);
+  const status = formatAiInterviewStatus(data);
+  const verdictLabel = data.result?.verdict ? `Verdict: ${escapeHtml(data.result.verdict)}` : '';
+  const candidateEmail = candidate?.email || candidate?.contact || 'Not provided';
+  const displayEmail = candidateEmail ? String(candidateEmail) : 'Not provided';
 
-  let html = `<div class="text-xs text-gray-700 mb-2">${statusParts.join(' \u00b7 ')}</div>`;
+  let html = `
+    <div class="space-y-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="px-2 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700">${escapeHtml(
+          status.label
+        )}</span>
+        ${verdictLabel
+          ? `<span class="px-2 py-1 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-800">${verdictLabel}</span>`
+          : ''}
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-gray-700">
+        <div>
+          <div class="text-[11px] uppercase tracking-wide text-gray-500">Candidate Email</div>
+          <div class="text-sm text-gray-900">${escapeHtml(displayEmail)}</div>
+        </div>
+        <div>
+          <div class="text-[11px] uppercase tracking-wide text-gray-500">Invitation Status</div>
+          <div class="text-sm text-gray-900">${escapeHtml(status.description)}</div>
+        </div>
+      </div>
+    </div>`;
 
   if (!data.result) {
-    html += '<p class="text-xs text-gray-700">AI Interview sent. Candidate has not completed yet, or analysis pending.</p>';
+    const pendingMessage =
+      data.session?.status === 'completed'
+        ? 'Candidate finished the AI interview. Analysis is being generated and the recruiter will receive an email update.'
+        : 'AI interview sent. Waiting for the candidate to complete the interview. The recruiter will be notified automatically.';
+    html += `<p class="text-xs text-gray-700">${escapeHtml(pendingMessage)}</p>`;
   } else {
     const { result } = data;
     const scores = result.scores || {};
     const scoreItems = [];
-    if (scores.overall != null) scoreItems.push(`Overall: ${scores.overall} / 5`);
-    if (scores.communication != null) scoreItems.push(`Communication: ${scores.communication}`);
-    if (scores.technical != null) scoreItems.push(`Technical: ${scores.technical}`);
-    if (scores.cultureFit != null) scoreItems.push(`Culture Fit: ${scores.cultureFit}`);
+    if (scores.overall != null) scoreItems.push({ label: 'Overall', value: `${scores.overall} / 5` });
+    if (scores.communication != null) scoreItems.push({ label: 'Communication', value: scores.communication });
+    if (scores.technical != null) scoreItems.push({ label: 'Technical', value: scores.technical });
+    if (scores.cultureFit != null) scoreItems.push({ label: 'Culture Fit', value: scores.cultureFit });
     if (scoreItems.length) {
-      const scoreSpans = scoreItems.map(text => `<span>${escapeHtml(text)}</span>`).join('');
-      html += `<div class="flex flex-wrap gap-3 text-xs text-gray-700 mb-2">${scoreSpans}</div>`;
+      const scoreList = scoreItems
+        .map(
+          item => `
+            <li class="flex items-center justify-between gap-2 py-1">
+              <span class="font-semibold text-gray-800">${escapeHtml(item.label)}</span>
+              <span class="text-gray-700">${escapeHtml(String(item.value))}</span>
+            </li>`
+        )
+        .join('');
+      html += `
+        <div class="border-t border-gray-100 pt-2">
+          <h4 class="text-xs font-semibold text-gray-800 mb-1">Scores</h4>
+          <ul class="text-xs text-gray-700">${scoreList}</ul>
+        </div>`;
     }
 
     if (result.summary) {
@@ -3860,6 +3918,14 @@ function renderCandidateAiInterviewPanel(candidate, options = {}) {
           <ul class="text-xs text-gray-700 list-disc list-inside">${stepsList}</ul>
         </div>`;
     }
+
+    html += `
+      <div class="mt-3 bg-blue-50 border border-blue-100 rounded-md p-3 text-[11px] text-blue-800 flex gap-2">
+        <span class="material-symbols-rounded text-base">groups</span>
+        <div>
+          Update the pipeline using <strong>Move to Human Interview</strong> or <strong>Reject Candidate</strong> to keep the team in sync.
+        </div>
+      </div>`;
 
     if (candidate?.id != null) {
       actions.push(
