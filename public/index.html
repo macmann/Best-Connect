@@ -479,37 +479,50 @@
   <!-- Main Application -->
   <div id="mainApp" class="hidden app-container">
     <header class="top-app-bar">
-      <div class="brand-cluster">
-        <img src="https://static.wixstatic.com/media/34647d_4924e46631c3463abed06f9e3147eba3~mv2.png" alt="Brillar Logo">
-        <div class="brand-text">
-          <span class="brand-title">Brillar Leave Management</span>
-          <span class="brand-subtitle">Modern, people-first HR experiences</span>
+      <div class="top-bar-shell">
+        <div class="brand-cluster">
+          <img src="https://static.wixstatic.com/media/34647d_4924e46631c3463abed06f9e3147eba3~mv2.png" alt="Brillar Logo">
+          <div class="brand-text">
+            <span class="brand-title">Brillar Leave Management</span>
+            <span class="brand-tagline">Modern, people-first HR experiences</span>
+          </div>
         </div>
-      </div>
-      <div class="app-actions">
-        <button id="changePassBtn" type="button" class="md-button md-button--tonal hidden">
-          <span class="material-symbols-rounded">key</span>
-          Change Password
-        </button>
-        <button id="logoutBtn" type="button" onclick="logout()" class="md-button md-button--outlined hidden">
-          <span class="material-symbols-rounded">logout</span>
-          Logout
-        </button>
+
+        <div class="primary-nav">
+          <div class="primary-tabs" role="tablist" aria-label="Primary navigation">
+            <button id="tabProfile" class="primary-tab hidden" type="button">
+              <span class="material-symbols-rounded">account_circle</span>
+              <span>My Profile</span>
+            </button>
+            <button id="tabPortal" class="primary-tab active-tab" type="button">
+              <span class="material-symbols-rounded">event_available</span>
+              <span>Leave Portal</span>
+            </button>
+          </div>
+
+          <label class="primary-tabs-dropdown" aria-label="Primary navigation dropdown">
+            <span class="material-symbols-rounded">menu</span>
+            <select id="primaryTabSelect">
+              <option value="portal" selected>Leave Portal</option>
+              <option value="profile">My Profile</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="app-actions">
+          <button id="changePassBtn" type="button" class="app-action-btn app-action-btn--ghost hidden">
+            <span class="material-symbols-rounded">key</span>
+            Change Password
+          </button>
+          <button id="logoutBtn" type="button" onclick="logout()" class="app-action-btn app-action-btn--alert hidden">
+            <span class="material-symbols-rounded">logout</span>
+            Logout
+          </button>
+        </div>
       </div>
     </header>
 
-    <nav class="tab-bar">
-      <div class="tab-section tab-section--primary">
-        <button id="tabProfile" class="tab-button hidden">
-          <span class="material-symbols-rounded">account_circle</span>
-          <span>My Profile</span>
-        </button>
-        <button id="tabPortal" class="tab-button active-tab">
-          <span class="material-symbols-rounded">event_available</span>
-          <span>Leave Portal</span>
-        </button>
-      </div>
-
+    <nav class="tab-bar tab-bar--secondary">
       <div class="tab-section tab-section--groups">
         <div class="tab-group" data-tab-group>
           <button type="button" class="tab-group-toggle" data-tab-group-toggle aria-expanded="false">

@@ -764,6 +764,11 @@ function showPanel(name) {
       loadFinanceData();
     }
   }
+
+  const primaryTabSelect = document.getElementById('primaryTabSelect');
+  if (primaryTabSelect && (name === 'profile' || name === 'portal')) {
+    primaryTabSelect.value = name;
+  }
 }
 
 // Role-based tab display
@@ -4240,6 +4245,12 @@ async function init() {
   if (settingsTab) settingsTab.onclick = () => showPanel('settings');
   const financeTab = document.getElementById('tabFinance');
   if (financeTab) financeTab.onclick = () => showPanel('finance');
+  const primaryTabSelect = document.getElementById('primaryTabSelect');
+  if (primaryTabSelect) {
+    primaryTabSelect.addEventListener('change', event => {
+      showPanel(event.target.value);
+    });
+  }
   const defaultPanel = currentUser
     ? isSuperAdmin(currentUser)
       ? 'finance'
