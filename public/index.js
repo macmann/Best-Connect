@@ -2535,6 +2535,9 @@ async function initRecruitment() {
   const aiInterviewPanel = document.getElementById('candidateAiInterviewPanel');
   if (aiInterviewPanel) aiInterviewPanel.addEventListener('click', onCandidateAiPanelClick);
 
+  const runAiScreeningBtn = document.getElementById('runAiScreeningBtn');
+  if (runAiScreeningBtn) runAiScreeningBtn.addEventListener('click', onRunAiScreeningClick);
+
   const hireCloseBtn = document.getElementById('candidateHireCloseBtn');
   if (hireCloseBtn) hireCloseBtn.onclick = closeCandidateHireModal;
 
@@ -3588,17 +3591,63 @@ async function loadCandidateCvPreview(candidate) {
   }
 }
 
+function updateAiScreeningTriggerBadge(application) {
+  const badge = document.getElementById('aiScreeningTriggerBadge');
+  if (!badge) return;
+
+  if (!application || !application.aiScreeningResult) {
+    badge.classList.add('hidden');
+    return;
+  }
+
+  const manuallyTriggered = Boolean(application.aiScreeningManualTriggered);
+  badge.textContent = manuallyTriggered ? '(Manually triggered)' : '(Auto screening)';
+  badge.classList.toggle('hidden', false);
+  badge.classList.remove('text-green-600', 'text-yellow-600');
+  badge.classList.add(manuallyTriggered ? 'text-yellow-600' : 'text-green-600');
+}
+
+function updateRunAiScreeningButton(application) {
+  const runBtn = document.getElementById('runAiScreeningBtn');
+  if (!runBtn) return;
+
+  const hasApplication = Boolean(application && (application._id || application.id));
+  const hasResult = Boolean(application && application.aiScreeningResult);
+
+  runBtn.innerText = hasResult ? 'Re-run AI Screening' : 'Run AI Screening';
+  runBtn.disabled = !hasApplication;
+  runBtn.dataset.applicationId = hasApplication ? (application._id || application.id) : '';
+  runBtn.classList.toggle('opacity-60', !hasApplication);
+}
+
 function renderAiCvScreening(application) {
   const panel = document.getElementById('ai-cv-screening');
   if (!panel) return;
 
-  if (!application || !application.aiScreeningResult) {
-    panel.innerHTML = "<p class='text-gray-500 text-sm'>No AI screening result available.</p>";
-    return;
-  }
+  updateRunAiScreeningButton(application);
+  updateAiScreeningTriggerBadge(application);
 
   if (!panel.querySelector('#aiFitLevel') && aiCvScreeningTemplate) {
     panel.innerHTML = aiCvScreeningTemplate;
+  }
+
+  if (!application || !application.aiScreeningResult) {
+    const fitLevelEl = document.getElementById('aiFitLevel');
+    const fitScoreEl = document.getElementById('aiFitScore');
+    const summaryEl = document.getElementById('aiSummary');
+    const strengthsUl = document.getElementById('aiStrengths');
+    const concernsUl = document.getElementById('aiConcerns');
+    const rec = document.getElementById('aiRecommendation');
+    if (fitLevelEl) fitLevelEl.innerText = '-';
+    if (fitScoreEl) fitScoreEl.innerText = '';
+    if (summaryEl) summaryEl.innerText = 'No AI screening result available.';
+    if (strengthsUl) strengthsUl.innerHTML = '';
+    if (concernsUl) concernsUl.innerHTML = '';
+    if (rec) {
+      rec.innerText = '';
+      rec.classList.remove('bg-green-600', 'bg-yellow-600', 'bg-red-600');
+    }
+    return;
   }
 
   const r = application.aiScreeningResult;
@@ -3638,6 +3687,51 @@ function renderAiCvScreening(application) {
     r.recommendation === 'manual_review' ? 'bg-yellow-600' :
     'bg-red-600'
   );
+}
+
+async function onRunAiScreeningClick() {
+  const runBtn = document.getElementById('runAiScreeningBtn');
+  const candidate = recruitmentActiveDetailsCandidateId
+    ? getCachedCandidate(recruitmentActiveDetailsCandidateId)
+    : null;
+  const application = candidate?.application;
+  const applicationId = runBtn?.dataset?.applicationId;
+
+  if (!runBtn || runBtn.disabled) return;
+  if (!application || !applicationId) {
+    alert('No application found for AI screening.');
+    return;
+  }
+
+  runBtn.disabled = true;
+  try {
+    const res = await fetch(`/api/hr/applications/${applicationId}/ai-screening/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include'
+    });
+
+    const data = await res.json();
+
+    if (!data.success) {
+      alert('AI Screening failed: ' + (data.error || ''));
+      return;
+    }
+
+    alert('AI Screening finished successfully!');
+    application.aiScreeningResult = data.aiScreeningResult;
+    application.aiScreeningManualTriggered = true;
+    application.aiScreeningAt = new Date().toISOString();
+    if (candidate) {
+      cacheCandidateDetails({ ...candidate, application, applicationId });
+    }
+    renderAiCvScreening(application);
+  } catch (err) {
+    alert('Error running AI Screening.');
+    console.error(err);
+  } finally {
+    runBtn.disabled = false;
+  }
 }
 
 function setCommentFormEnabled(enabled) {

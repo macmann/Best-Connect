@@ -22,6 +22,7 @@ const {
 const recruitmentOpenApiSpec = require('./api/recruitmentopenAI');
 const hrPositionsRoutes = require('./api/hrPositions');
 const hrAiInterviewRoutes = require('./api/hrAiInterview');
+const hrApplicationsRoutes = require('./api/hrApplications');
 const publicCareersRoutes = require('./api/publicCareers');
 const publicAiInterviewRoutes = require('./api/publicAiInterview');
 
@@ -1610,6 +1611,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/hr', hrPositionsRoutes);
 app.use('/api/hr', hrAiInterviewRoutes);
+app.use('/api/hr', hrApplicationsRoutes);
 app.use('/api/public', publicCareersRoutes);
 app.use('/api/public', publicAiInterviewRoutes);
 
@@ -2582,9 +2584,12 @@ init().then(async () => {
       const applicationData = application
         ? {
             id: applicationId,
+            _id: applicationId,
             status: application?.status || null,
             createdAt: application?.createdAt || null,
-            aiScreeningResult: application?.aiScreeningResult || null
+            aiScreeningResult: application?.aiScreeningResult || null,
+            aiScreeningAt: application?.aiScreeningAt || null,
+            aiScreeningManualTriggered: Boolean(application?.aiScreeningManualTriggered)
           }
         : null;
       return {

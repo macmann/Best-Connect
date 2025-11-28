@@ -244,7 +244,8 @@ router.post('/positions/:id/apply', upload.single('cv'), async (req, res) => {
       {
         $set: {
           aiScreeningResult,
-          aiScreeningAt: new Date()
+          aiScreeningAt: new Date(),
+          aiScreeningManualTriggered: false
         }
       }
     );

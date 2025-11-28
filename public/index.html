@@ -1982,7 +1982,18 @@
                 </div>
               </div>
               <div id="ai-cv-screening" class="mt-4 p-4 rounded-lg bg-gray-50 border border-gray-200">
-                <h3 class="font-semibold text-lg mb-2">AI CV Screening</h3>
+                <div class="flex items-start justify-between gap-2 mb-2">
+                  <h3 class="font-semibold text-lg flex items-center gap-2">
+                    AI CV Screening
+                    <span id="aiScreeningTriggerBadge" class="text-xs font-medium text-green-600 hidden">
+                      (Auto screening)
+                    </span>
+                  </h3>
+                  <button id="runAiScreeningBtn"
+                    class="mt-4 px-3 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm">
+                    Run AI CV Screening
+                  </button>
+                </div>
 
                 <!-- Fit Level + Score -->
                 <div class="mb-2">
