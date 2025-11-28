@@ -67,6 +67,11 @@
   function renderForm(session) {
     const draft = getDraft();
     const questions = Array.isArray(session.questions) ? session.questions : [];
+    if (!questions.length) {
+      renderMessage('No interview questions available', 'Please contact your recruiter for an updated link.');
+      return;
+    }
+    let currentIndex = 0;
 
     const greeting = `Hi ${session.candidateName || 'there'}, welcome to your written interview for ${
       session.positionTitle || 'this role'
@@ -77,61 +82,106 @@
         <div class="space-y-2">
           <h2 class="text-2xl font-semibold text-gray-900">${session.templateTitle || 'AI Interview'}</h2>
           <p class="text-gray-600">${greeting}</p>
-          <p class="text-gray-600">Please answer all questions below. Your responses will only be saved when you click "Submit Interview".</p>
+          <p class="text-gray-600">Answer each question one at a time. Your responses are saved locally as drafts until you submit.</p>
         </div>
 
         <div id="message" class="hidden rounded-md bg-red-50 border border-red-200 text-red-800 px-4 py-3 text-sm"></div>
 
-        <form id="interview-form" class="space-y-6">
-          ${questions
-            .map(
-              q => `
-                <div class="space-y-2">
-                  <label class="block text-sm font-medium text-gray-900" for="q_${q.id}">${q.text}</label>
-                  <textarea
-                    id="q_${q.id}"
-                    data-question-id="${q.id}"
-                    class="w-full rounded-md border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-3"
-                    rows="4"
-                  >${(draft[q.id] || '').replace(/</g, '&lt;')}</textarea>
-                </div>
-              `
-            )
-            .join('')}
-          <div class="pt-2">
-            <button type="submit" class="inline-flex items-center justify-center px-5 py-3 bg-indigo-600 text-white font-semibold rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
-              Submit Interview
-            </button>
+        <div class="card space-y-4">
+          <div class="flex items-center justify-between">
+            <p id="progress" class="badge">Question 1 of ${questions.length}</p>
+            <p class="text-sm text-gray-600">You can go back anytime before submitting.</p>
           </div>
-        </form>
+
+          <form id="interview-form" class="space-y-4">
+            <div class="space-y-3">
+              <h3 id="question-text" class="text-lg font-semibold text-gray-900"></h3>
+              <p class="text-sm text-gray-600">Write your response in the box below. Your draft will be saved as you type.</p>
+              <label class="text-sm font-semibold text-gray-900" for="question-answer">Your Answer</label>
+              <textarea
+                id="question-answer"
+                class="input-field"
+                rows="6"
+                aria-describedby="progress"
+              ></textarea>
+            </div>
+
+            <div class="flex items-center justify-between pt-2 gap-3">
+              <button type="button" id="prev-btn" class="btn btn-secondary">Previous</button>
+              <div class="flex gap-3">
+                <button type="button" id="next-btn" class="btn btn-secondary">Save & Next</button>
+                <button type="submit" id="submit-btn" class="btn btn-primary">Submit Interview</button>
+              </div>
+            </div>
+          </form>
+        </div>
       </div>
     `;
 
     const form = document.getElementById('interview-form');
     const messageBox = document.getElementById('message');
+    const progress = document.getElementById('progress');
+    const questionText = document.getElementById('question-text');
+    const answerField = document.getElementById('question-answer');
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const submitBtn = document.getElementById('submit-btn');
 
-    form.addEventListener('input', event => {
-      if (event.target instanceof HTMLTextAreaElement) {
-        const questionId = event.target.dataset.questionId;
-        const value = event.target.value;
-        const updatedDraft = { ...getDraft(), [questionId]: value };
-        saveDraft(updatedDraft);
+    function syncButtons() {
+      prevBtn.disabled = currentIndex === 0;
+      const onLastQuestion = currentIndex === questions.length - 1;
+      nextBtn.classList.toggle('hidden', onLastQuestion);
+      submitBtn.classList.toggle('hidden', !onLastQuestion);
+    }
+
+    function loadQuestion() {
+      const question = questions[currentIndex];
+      if (!question) return;
+
+      messageBox.classList.add('hidden');
+      messageBox.textContent = '';
+      progress.textContent = `Question ${currentIndex + 1} of ${questions.length}`;
+      questionText.textContent = question.text;
+      answerField.value = draft[question.id] || '';
+      syncButtons();
+      answerField.focus();
+    }
+
+    function persistCurrentAnswer() {
+      const question = questions[currentIndex];
+      if (!question) return;
+      draft[question.id] = answerField.value;
+      saveDraft(draft);
+    }
+
+    answerField.addEventListener('input', persistCurrentAnswer);
+
+    prevBtn.addEventListener('click', () => {
+      persistCurrentAnswer();
+      if (currentIndex > 0) {
+        currentIndex -= 1;
+        loadQuestion();
+      }
+    });
+
+    nextBtn.addEventListener('click', () => {
+      persistCurrentAnswer();
+      if (currentIndex < questions.length - 1) {
+        currentIndex += 1;
+        loadQuestion();
       }
     });
 
     form.addEventListener('submit', async event => {
       event.preventDefault();
+      persistCurrentAnswer();
       messageBox.classList.add('hidden');
       messageBox.textContent = '';
 
-      const answers = questions.map(question => {
-        const textarea = document.querySelector(`textarea[data-question-id="${question.id}"]`);
-        const answerText = (textarea?.value || '').trim();
-        return {
-          questionId: question.id,
-          answerText
-        };
-      });
+      const answers = questions.map(question => ({
+        questionId: question.id,
+        answerText: (draft[question.id] || '').trim()
+      }));
 
       const missing = answers.some(answer => !answer.answerText);
       if (missing) {
@@ -166,6 +216,8 @@
         messageBox.classList.remove('hidden');
       }
     });
+
+    loadQuestion();
   }
 
   async function init() {
