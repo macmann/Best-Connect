@@ -1012,17 +1012,7 @@
 }
 
 .recruitment-table-card {
-  overflow: hidden;
-}
-
-.recruitment-table-scroll {
-  width: 100%;
-  overflow: auto;
-  margin-top: 4px;
-}
-
-.recruitment-table-card .data-table {
-  min-width: 720px;
+  overflow-x: auto;
 }
 
 .payroll-summary-section {
