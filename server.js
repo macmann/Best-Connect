@@ -2706,9 +2706,11 @@ init().then(async () => {
       'application/octet-stream';
 
     const filePath = cvFilePath
-      ? path.isAbsolute(cvFilePath)
-        ? cvFilePath
-        : path.join(__dirname, cvFilePath.replace(/^[/\\]+/, ''))
+      ? cvFilePath.startsWith('/uploads/') || cvFilePath.startsWith('uploads/')
+        ? path.join(__dirname, cvFilePath.replace(/^[/\\]+/, ''))
+        : path.isAbsolute(cvFilePath)
+          ? cvFilePath
+          : path.join(__dirname, cvFilePath.replace(/^[/\\]+/, ''))
       : null;
     const hasFile = filePath && fs.existsSync(filePath);
 
