@@ -4,205 +4,78 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Brillar AI Interview</title>
-  <!-- Inline styles ensure the page renders correctly even if external stylesheets are unavailable -->
-  <style>
-    :root {
-      --gray-50: #f9fafb;
-      --gray-100: #f3f4f6;
-      --gray-300: #d1d5db;
-      --gray-500: #6b7280;
-      --gray-600: #4b5563;
-      --gray-900: #111827;
-      --indigo-50: #eef2ff;
-      --indigo-500: #6366f1;
-      --indigo-600: #4f46e5;
-      --indigo-700: #4338ca;
-      --red-50: #fef2f2;
-      --red-200: #fecdd3;
-      --red-800: #991b1b;
-      --white: #ffffff;
-    }
-
-    * { box-sizing: border-box; }
-
-    body {
-      margin: 0;
-      min-height: 100vh;
-      background: var(--gray-50);
-      color: var(--gray-900);
-      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    }
-
-    /* Layout */
-    .max-w-4xl { max-width: 56rem; }
-    .mx-auto { margin-left: auto; margin-right: auto; }
-    .px-4 { padding-left: 1rem; padding-right: 1rem; }
-    .py-4 { padding-top: 1rem; padding-bottom: 1rem; }
-    .py-10 { padding-top: 2.5rem; padding-bottom: 2.5rem; }
-    .p-6 { padding: 1.5rem; }
-    .pt-2 { padding-top: 0.5rem; }
-    .px-5 { padding-left: 1.25rem; padding-right: 1.25rem; }
-    .py-3 { padding-top: 0.75rem; padding-bottom: 0.75rem; }
-    .p-3 { padding: 0.75rem; }
-    .space-y-2 > * + * { margin-top: 0.5rem; }
-    .space-y-3 > * + * { margin-top: 0.75rem; }
-    .space-y-4 > * + * { margin-top: 1rem; }
-    .space-y-6 > * + * { margin-top: 1.5rem; }
-    .space-y-8 > * + * { margin-top: 2rem; }
-    .space-x-3 > * + * { margin-left: 0.75rem; }
-    .gap-2 { gap: 0.5rem; }
-    .gap-3 { gap: 0.75rem; }
-
-    /* Flex utilities */
-    .flex { display: flex; }
-    .inline-flex { display: inline-flex; }
-    .items-center { align-items: center; }
-    .justify-between { justify-content: space-between; }
-    .justify-center { justify-content: center; }
-
-    /* Sizing & shape */
-    .h-10 { height: 2.5rem; }
-    .w-10 { width: 2.5rem; }
-    .w-full { width: 100%; }
-    .rounded-full { border-radius: 9999px; }
-    .rounded-lg { border-radius: 0.75rem; }
-    .rounded-md { border-radius: 0.375rem; }
-
-    /* Colors & backgrounds */
-    .bg-gray-50 { background: var(--gray-50); }
-    .bg-white { background: var(--white); }
-    .bg-indigo-50 { background: var(--indigo-50); }
-    .bg-indigo-600 { background: var(--indigo-600); }
-    .bg-red-50 { background: var(--red-50); }
-    .text-white { color: var(--white); }
-    .text-gray-500 { color: var(--gray-500); }
-    .text-gray-600 { color: var(--gray-600); }
-    .text-gray-900 { color: var(--gray-900); }
-    .text-indigo-700 { color: var(--indigo-700); }
-    .text-red-800 { color: var(--red-800); }
-    .border { border-width: 1px; border-style: solid; }
-    .border-gray-300 { border-color: var(--gray-300); }
-    .border-red-200 { border-color: var(--red-200); }
-
-    /* Typography */
-    .text-xs { font-size: 0.75rem; line-height: 1rem; }
-    .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
-    .text-base { font-size: 1rem; line-height: 1.5rem; }
-    .text-lg { font-size: 1.125rem; line-height: 1.75rem; }
-    .text-xl { font-size: 1.25rem; line-height: 1.75rem; }
-    .text-2xl { font-size: 1.5rem; line-height: 2rem; }
-    .font-semibold { font-weight: 600; }
-    .font-bold { font-weight: 700; }
-    .uppercase { text-transform: uppercase; }
-    .tracking-wide { letter-spacing: 0.05em; }
-    .text-center { text-align: center; }
-
-    /* Effects */
-    .shadow-sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); }
-    .shadow-md { box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08); }
-    .hover\:bg-indigo-700:hover { background: #4338ca; }
-    .hover\:bg-gray-100:hover { background: var(--gray-100); }
-    .hidden { display: none; }
-
-    /* Form elements */
-    .input-field {
-      width: 100%;
-      border: 1px solid var(--gray-300);
-      border-radius: 0.375rem;
-      padding: 0.75rem;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-      font: inherit;
-      color: inherit;
-      background: var(--white);
-    }
-
-    .input-field:focus {
-      outline: none;
-      border-color: var(--indigo-500);
-      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
-    }
-
-    /* Buttons */
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-      padding: 0.75rem 1.25rem;
-      border-radius: 0.375rem;
-      font-weight: 600;
-      font-size: 0.95rem;
-      border: 1px solid transparent;
-      cursor: pointer;
-      text-decoration: none;
-      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-    }
-
-    .btn-primary {
-      background: var(--indigo-600);
-      color: var(--white);
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-    }
-
-    .btn-primary:hover { background: #4338ca; }
-
-    .btn-secondary {
-      background: var(--white);
-      color: var(--gray-900);
-      border-color: var(--gray-300);
-    }
-
-    .btn-secondary:hover { background: var(--gray-100); }
-
-    .btn:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    /* Badges & cards */
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.5rem 0.75rem;
-      background: var(--indigo-50);
-      color: var(--indigo-700);
-      border-radius: 9999px;
-      font-weight: 600;
-      font-size: 0.9rem;
-    }
-
-    .card {
-      background: var(--white);
-      border-radius: 0.75rem;
-      padding: 1.5rem;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-    }
-
-    /* Utility overrides */
-    .bg-white { background: var(--white); }
-    .shadow-sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); }
-  </style>
+  <link rel="icon" href="/logo.png" />
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="min-h-screen bg-gray-50 text-gray-900">
-  <header class="bg-white shadow-sm">
-    <div class="max-w-4xl mx-auto px-4 py-4 flex items-center space-x-3">
-      <div class="h-10 w-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold">
-        B
+<body class="bg-gray-50 text-gray-900">
+  <header class="sticky top-0 z-20">
+    <nav class="bg-white shadow px-8 py-4 flex items-center justify-between max-w-6xl mx-auto">
+      <a href="https://www.brillar.io" class="flex items-center space-x-2">
+        <img
+          fetchpriority="high"
+          sizes="131px"
+          srcset="https://static.wixstatic.com/media/34647d_4924e46631c3463abed06f9e3147eba3~mv2.png/v1/fill/w_131,h_57,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Screen%20Shot%202019-07-09%20at%2010_05_edited_p.png 1x,
+                  https://static.wixstatic.com/media/34647d_4924e46631c3463abed06f9e3147eba3~mv2.png/v1/fill/w_262,h_114,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Screen%20Shot%202019-07-09%20at%2010_05_edited_p.png 2x"
+          id="img_comp-k2yn8cmg"
+          src="https://static.wixstatic.com/media/34647d_4924e46631c3463abed06f9e3147eba3~mv2.png/v1/fill/w_131,h_57,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Screen%20Shot%202019-07-09%20at%2010_05_edited_p.png"
+          alt="Brillar Logo"
+          style="object-fit:cover"
+          class="BI8PVQ Tj01hh h-12 w-auto"
+          width="131"
+          height="57"
+        />
+      </a>
+      <div class="flex items-center space-x-6 text-sm font-medium text-gray-700">
+        <a href="https://www.brillar.io/" class="hover:text-blue-600">Home</a>
+        <a href="https://www.brillar.io/#about" class="hover:text-blue-600">About</a>
+        <a href="https://www.brillar.io/#solutions" class="hover:text-blue-600">Solutions</a>
+        <a href="https://www.brillar.io/#partners" class="hover:text-blue-600">Partners</a>
+        <a href="https://www.brillar.io/#contact" class="hover:text-blue-600">Contact</a>
+        <a href="https://hr.brillar.ai/careers" class="text-blue-600">Careers</a>
       </div>
-      <div>
-        <p class="text-xs uppercase tracking-wide text-gray-500">Brillar</p>
-        <h1 class="text-lg font-semibold">AI Interview</h1>
-      </div>
-    </div>
+    </nav>
   </header>
 
-  <main class="max-w-4xl mx-auto px-4 py-10">
-    <div id="interview-root" class="bg-white shadow-sm rounded-lg p-6">
-      <p class="text-gray-600">Loading interview...</p>
-    </div>
+  <main>
+    <section class="bg-gradient-to-r from-blue-900 via-blue-700 to-blue-500 text-white">
+      <div class="max-w-5xl mx-auto px-6 py-16">
+        <p class="text-sm uppercase tracking-widest text-blue-100">Brillar AI Interview</p>
+        <h1 class="text-4xl sm:text-5xl font-bold mt-4">Your Digital Interview Experience</h1>
+        <h2 class="text-2xl sm:text-3xl font-semibold mt-2 text-blue-100">Guided by Brillar</h2>
+        <p class="mt-4 max-w-3xl text-lg text-blue-100">Share your expertise through our AI-assisted interview. Complete each question at your own pace and submit when you're ready.</p>
+        <div class="mt-8 flex flex-wrap gap-4">
+          <a href="#interview" class="inline-block px-6 py-3 bg-white text-blue-700 font-semibold rounded-md shadow hover:bg-blue-50">Start Interview</a>
+          <a href="https://www.brillar.io/#contact" class="inline-block px-6 py-3 bg-transparent border border-white text-white font-semibold rounded-md hover:bg-white hover:text-blue-700">Need Help?</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="max-w-5xl mx-auto px-6 -mt-10">
+      <div class="bg-white rounded-2xl shadow-lg p-6 sm:p-8">
+        <h3 class="text-2xl font-semibold text-gray-900">Welcome to your interview</h3>
+        <p class="mt-3 text-gray-600">Thank you for taking the time to complete your written interview. We'll guide you through each question with clear prompts and save your drafts locally so you can review before submitting.</p>
+        <ul class="mt-4 grid gap-3 sm:grid-cols-2 text-sm text-gray-700">
+          <li class="flex items-start space-x-2"><span class="mt-1 h-2 w-2 rounded-full bg-blue-600"></span><span>Answer questions one at a time with autosave for drafts.</span></li>
+          <li class="flex items-start space-x-2"><span class="mt-1 h-2 w-2 rounded-full bg-blue-600"></span><span>Navigate freely between questions before submitting.</span></li>
+          <li class="flex items-start space-x-2"><span class="mt-1 h-2 w-2 rounded-full bg-blue-600"></span><span>Your responses are securely submitted directly to our team.</span></li>
+          <li class="flex items-start space-x-2"><span class="mt-1 h-2 w-2 rounded-full bg-blue-600"></span><span>Reach out anytime if you need assistance.</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="interview" class="max-w-5xl mx-auto px-6 py-12">
+      <div id="interview-root" class="bg-white rounded-2xl shadow-lg p-6 sm:p-8 border border-gray-100">
+        <p class="text-gray-600">Loading interview...</p>
+      </div>
+    </section>
   </main>
 
-  <script defer src="/ai-interview.js"></script>
+  <footer class="bg-gray-900 text-gray-300 text-sm py-6 mt-10">
+    <div class="max-w-5xl mx-auto px-6 text-center space-y-1">
+      <p>© Brillar. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script src="/ai-interview.js" defer></script>
 </body>
 </html>

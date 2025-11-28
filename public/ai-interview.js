@@ -80,37 +80,37 @@
     root.innerHTML = `
       <div class="space-y-8">
         <div class="space-y-2">
-          <h2 class="text-2xl font-semibold text-gray-900">${session.templateTitle || 'AI Interview'}</h2>
+          <h2 class="text-2xl sm:text-3xl font-semibold text-gray-900">${session.templateTitle || 'AI Interview'}</h2>
           <p class="text-gray-600">${greeting}</p>
           <p class="text-gray-600">Answer each question one at a time. Your responses are saved locally as drafts until you submit.</p>
         </div>
 
         <div id="message" class="hidden rounded-md bg-red-50 border border-red-200 text-red-800 px-4 py-3 text-sm"></div>
 
-        <div class="card space-y-4">
-          <div class="flex items-center justify-between">
-            <p id="progress" class="badge">Question 1 of ${questions.length}</p>
+        <div class="bg-gradient-to-r from-white via-white to-blue-50 border border-gray-100 rounded-2xl shadow-md p-6 sm:p-8 space-y-5">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <p id="progress" class="inline-flex items-center px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm font-semibold">Question 1 of ${questions.length}</p>
             <p class="text-sm text-gray-600">You can go back anytime before submitting.</p>
           </div>
 
-          <form id="interview-form" class="space-y-4">
+          <form id="interview-form" class="space-y-5">
             <div class="space-y-3">
-              <h3 id="question-text" class="text-lg font-semibold text-gray-900"></h3>
+              <h3 id="question-text" class="text-lg sm:text-xl font-semibold text-gray-900"></h3>
               <p class="text-sm text-gray-600">Write your response in the box below. Your draft will be saved as you type.</p>
               <label class="text-sm font-semibold text-gray-900" for="question-answer">Your Answer</label>
               <textarea
                 id="question-answer"
-                class="input-field"
-                rows="6"
+                class="w-full border border-gray-300 rounded-lg p-4 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                rows="8"
                 aria-describedby="progress"
               ></textarea>
             </div>
 
-            <div class="flex items-center justify-between pt-2 gap-3">
-              <button type="button" id="prev-btn" class="btn btn-secondary">Previous</button>
-              <div class="flex gap-3">
-                <button type="button" id="next-btn" class="btn btn-secondary">Save & Next</button>
-                <button type="submit" id="submit-btn" class="btn btn-primary">Submit Interview</button>
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
+              <button type="button" id="prev-btn" class="inline-flex items-center justify-center px-5 py-3 bg-white text-gray-800 font-semibold rounded-md border border-gray-300 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed">Previous</button>
+              <div class="flex gap-3 w-full sm:w-auto justify-end">
+                <button type="button" id="next-btn" class="inline-flex items-center justify-center px-5 py-3 bg-white text-gray-800 font-semibold rounded-md border border-gray-300 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">Save & Next</button>
+                <button type="submit" id="submit-btn" class="inline-flex items-center justify-center px-5 py-3 bg-blue-600 text-white font-semibold rounded-md shadow hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">Submit Interview</button>
               </div>
             </div>
           </form>
