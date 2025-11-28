@@ -1,6 +1,7 @@
 const express = require('express');
 const { ObjectId } = require('mongodb');
 const { getDatabase } = require('../db');
+const { analyzeInterviewResponses } = require('../openaiClient');
 
 const router = express.Router();
 
@@ -138,7 +139,53 @@ router.post('/ai-interview/:token/submit', async (req, res) => {
       }
     );
 
-    return res.json({ success: true });
+    const updatedSession = await db.collection('ai_interview_sessions').findOne({ token });
+
+    const application = await db.collection('applications').findOne({ _id: updatedSession.applicationId });
+    const candidate = await db.collection('candidates').findOne({ _id: updatedSession.candidateId });
+    const position = await db.collection('positions').findOne({ _id: updatedSession.positionId });
+
+    const payload = {
+      positionTitle: position?.title,
+      positionDescription: position?.description,
+      candidateName: buildCandidateName(candidate) || candidate?.fullName || candidate?.name,
+      questions: updatedSession.aiInterviewQuestions,
+      answers: updatedSession.answers,
+    };
+
+    let analysis;
+    try {
+      analysis = await analyzeInterviewResponses(payload);
+    } catch (err) {
+      console.error('Error analyzing interview:', err);
+      return res.json({ success: true, aiAnalysisQueued: false });
+    }
+
+    const { result, raw } = analysis;
+
+    const aiResultDoc = {
+      sessionId: updatedSession._id,
+      applicationId: updatedSession.applicationId,
+      candidateId: updatedSession.candidateId,
+      positionId: updatedSession.positionId,
+      scores: result.scores || {},
+      verdict: result.verdict || 'hold',
+      summary: result.summary || '',
+      strengths: result.strengths || [],
+      risks: result.risks || [],
+      recommendedNextSteps: result.recommendedNextSteps || [],
+      rawModelResponse: raw,
+      createdAt: new Date(),
+    };
+
+    const insertResult = await db.collection('ai_interview_results').insertOne(aiResultDoc);
+
+    await db.collection('ai_interview_sessions').updateOne(
+      { _id: updatedSession._id },
+      { $set: { aiResultId: insertResult.insertedId } }
+    );
+
+    return res.json({ success: true, aiAnalysisQueued: true });
   } catch (err) {
     console.error('Error submitting AI interview answers:', err);
     return res.status(500).json({ error: 'failed_to_submit_answers' });
