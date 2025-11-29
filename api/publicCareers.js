@@ -6,6 +6,7 @@ const { ObjectId } = require('mongodb');
 const { getDatabase, db } = require('../db');
 const { extractTextFromPdf } = require('../utils/cvParser');
 const { analyzeCvAgainstJd } = require('../openaiClient');
+const { loadAiSettings } = require('../aiSettings');
 
 const router = express.Router();
 
@@ -256,12 +257,19 @@ router.post('/positions/:id/apply', upload.single('cv'), async (req, res) => {
 
     let aiScreeningResult = null;
     try {
-      aiScreeningResult = await analyzeCvAgainstJd({
-        cvText,
-        jdText: buildJdText(positionForScreening),
-        positionTitle: positionForScreening?.title,
-        candidateName: fullName
-      });
+      const aiSettings = await loadAiSettings();
+      aiScreeningResult = await analyzeCvAgainstJd(
+        {
+          cvText,
+          jdText: buildJdText(positionForScreening),
+          positionTitle: positionForScreening?.title,
+          candidateName: fullName
+        },
+        {
+          model: aiSettings.model,
+          screeningPrompt: aiSettings.screeningPrompt
+        }
+      );
     } catch (err) {
       console.error('AI CV Screening failed:', err);
     }

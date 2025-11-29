@@ -1,32 +1,23 @@
 const OpenAI = require('openai');
+const { DEFAULT_AI_SETTINGS } = require('./aiSettings');
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-async function generateInterviewQuestionsForPosition(position) {
+async function generateInterviewQuestionsForPosition(position, options = {}) {
   const { title, description, department, employmentType } = position;
+  const promptIntro = options.questionPrompt || DEFAULT_AI_SETTINGS.questionPrompt;
 
-  const prompt = `
-You are an HR expert. Generate a list of 5-8 thoughtful written interview questions for a candidate applying for the following position.
-
-Return ONLY a valid JSON array of objects with fields:
-- "id": a short identifier like "q1", "q2", ...
-- "text": the question text
+  const prompt = `${promptIntro}
 
 Position title: ${title || ''}
 Department: ${department || ''}
 Employment type: ${employmentType || ''}
-Description: ${description || ''}
-
-The questions should:
-- Be open-ended
-- Reveal experience, thinking process, and communication
-- Be suitable for a written interview (text answers)
-`;
+Description: ${description || ''}`;
 
   const response = await client.chat.completions.create({
-    model: 'gpt-5.1-mini',
+    model: options.model || 'gpt-5.1-mini',
     messages: [
       { role: 'system', content: 'You output strictly valid JSON only. Do NOT include markdown code fences. Do NOT include explanations.' },
       { role: 'user', content: prompt }
@@ -122,32 +113,13 @@ ${payload.questions.map(q => {
   return { result, raw: content };
 }
 
-async function analyzeCvAgainstJd({ cvText, jdText, positionTitle, candidateName }) {
+async function analyzeCvAgainstJd({ cvText, jdText, positionTitle, candidateName }, options = {}) {
   if (!cvText || !jdText) {
     throw new Error("Both cvText and jdText are required for analysis.");
   }
 
-  const prompt = `
-You are an HR assistant helping a recruiter evaluate candidates.
-
-Analyze the following candidate CV text against the job description.
-
-Return a JSON object with EXACTLY these fields and nothing else:
-
-{
-  "summary": string,                 // 3-5 sentence summary of candidate profile
-  "fitScore": number,               // from 0 to 100, how well the candidate fits the JD
-  "strengths": string[],            // 3-6 bullet points
-  "risks": string[],                // 2-5 bullet points, gaps or concerns
-  "recommendation": string          // one of: "Strong Fit", "Good Fit", "Borderline", "Not Recommended"
-}
-
-Rules:
-- Output MUST be valid JSON.
-- Do NOT include any markdown, backticks, or explanations.
-- Do NOT include comments.
-- Do NOT include trailing commas.
-- If something is unclear, mention it briefly in "risks", but do not invent fake experience.
+  const promptIntro = options.screeningPrompt || DEFAULT_AI_SETTINGS.screeningPrompt;
+  const prompt = `${promptIntro}
 
 Position title: ${positionTitle || "N/A"}
 Candidate name: ${candidateName || "N/A"}
@@ -158,11 +130,10 @@ ${jdText}
 
 CV TEXT:
 --------
-${cvText}
-`;
+${cvText}`;
 
   const completion = await client.chat.completions.create({
-    model: process.env.OPENAI_CV_MODEL || "gpt-5.1-mini",
+    model: options.model || process.env.OPENAI_CV_MODEL || "gpt-5.1-mini",
     messages: [
       {
         role: "system",

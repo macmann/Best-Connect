@@ -448,6 +448,14 @@ let emailSettingsHasPassword = false;
 let emailSettingsHasClientSecret = false;
 let emailSettingsHasRefreshToken = false;
 let emailRecipientOptions = [];
+let aiSettings = null;
+let aiSettingsLoaded = false;
+let aiSettingsLoading = null;
+let aiModelOptions = [
+  { value: 'gpt-5', label: 'GPT5' },
+  { value: 'gpt-5.1-mini', label: 'GPT5.1 mini' },
+  { value: 'gpt-5.1-nano', label: 'GPT5.1nano' }
+];
 
 function normalizeCandidateId(value) {
   if (value === null || typeof value === 'undefined') return null;
@@ -802,6 +810,7 @@ function showPanel(name) {
     if (isManagerRole(currentUser?.role)) {
       loadHolidays();
       loadEmailSettingsConfig();
+      loadAiSettingsConfig();
     }
   }
   if (name === 'finance' && financePanel) {
@@ -2448,6 +2457,132 @@ async function onEmailSettingsSubmit(ev) {
           : 'Provide a delegated refresh token if your app uses delegated permissions.';
       }
     }
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
+function setAiSettingsStatus(message, type = 'info') {
+  const statusEl = document.getElementById('aiSettingsStatus');
+  if (!statusEl) return;
+  statusEl.textContent = message || '';
+  statusEl.classList.remove('settings-status--error', 'settings-status--success');
+  if (!message) {
+    statusEl.classList.add('text-muted');
+    return;
+  }
+  statusEl.classList.remove('text-muted');
+  if (type === 'error') {
+    statusEl.classList.add('settings-status--error');
+  } else if (type === 'success') {
+    statusEl.classList.add('settings-status--success');
+  }
+}
+
+function renderAiSettingsForm() {
+  const modelSelect = document.getElementById('aiModel');
+  if (modelSelect) {
+    modelSelect.innerHTML = (aiModelOptions || [])
+      .map(option => `<option value="${option.value}">${option.label || option.value}</option>`)
+      .join('');
+    const preferredModel = aiSettings?.model || aiModelOptions?.[0]?.value || '';
+    modelSelect.value = preferredModel;
+  }
+
+  const questionPromptInput = document.getElementById('aiQuestionPrompt');
+  if (questionPromptInput) {
+    questionPromptInput.value = aiSettings?.questionPrompt || '';
+  }
+
+  const screeningPromptInput = document.getElementById('aiScreeningPrompt');
+  if (screeningPromptInput) {
+    screeningPromptInput.value = aiSettings?.screeningPrompt || '';
+  }
+}
+
+async function fetchAiSettings({ force = false } = {}) {
+  if (!force && aiSettingsLoaded && !aiSettingsLoading) {
+    return { settings: aiSettings, modelOptions: aiModelOptions };
+  }
+  if (!force && aiSettingsLoading) {
+    return aiSettingsLoading;
+  }
+
+  const request = (async () => {
+    const res = await apiFetch('/settings/ai');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Unable to load AI settings.');
+    }
+    const settings = data.settings || {};
+    const modelOptions = Array.isArray(data.modelOptions) ? data.modelOptions : [];
+    return { settings, modelOptions };
+  })();
+
+  aiSettingsLoading = request;
+
+  try {
+    const result = await request;
+    aiSettings = result.settings || {};
+    aiModelOptions = result.modelOptions && result.modelOptions.length ? result.modelOptions : aiModelOptions;
+    aiSettingsLoaded = true;
+    return result;
+  } finally {
+    aiSettingsLoading = null;
+  }
+}
+
+async function loadAiSettingsConfig({ force = false } = {}) {
+  if (!currentUser || !isManagerRole(currentUser)) return;
+  if (!force && aiSettingsLoaded) {
+    renderAiSettingsForm();
+    setAiSettingsStatus('AI settings loaded.');
+    return;
+  }
+  setAiSettingsStatus('Loading AI settings...');
+  try {
+    const result = await fetchAiSettings({ force });
+    aiSettings = result.settings || {};
+    aiModelOptions = result.modelOptions && result.modelOptions.length ? result.modelOptions : aiModelOptions;
+    aiSettingsLoaded = true;
+    renderAiSettingsForm();
+    setAiSettingsStatus('AI settings loaded.');
+  } catch (err) {
+    console.error('Unable to load AI settings', err);
+    setAiSettingsStatus(err.message || 'Unable to load AI settings.', 'error');
+  }
+}
+
+async function onAiSettingsSubmit(ev) {
+  ev.preventDefault();
+  if (!currentUser || !isManagerRole(currentUser)) return;
+  const form = ev.currentTarget;
+  const submitBtn = form?.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
+  setAiSettingsStatus('Saving AI settings...');
+  try {
+    const payload = {
+      model: document.getElementById('aiModel')?.value || '',
+      questionPrompt: document.getElementById('aiQuestionPrompt')?.value || '',
+      screeningPrompt: document.getElementById('aiScreeningPrompt')?.value || ''
+    };
+    const res = await apiFetch('/settings/ai', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to save AI settings.');
+    }
+    aiSettings = data.settings || payload;
+    aiModelOptions = Array.isArray(data.modelOptions) && data.modelOptions.length ? data.modelOptions : aiModelOptions;
+    aiSettingsLoaded = true;
+    renderAiSettingsForm();
+    setAiSettingsStatus('AI settings saved successfully.', 'success');
+  } catch (err) {
+    console.error('Failed to save AI settings', err);
+    setAiSettingsStatus(err.message || 'Unable to save AI settings.', 'error');
+  } finally {
     if (submitBtn) submitBtn.disabled = false;
   }
 }
@@ -4555,6 +4690,8 @@ async function init() {
 
   const emailForm = document.getElementById('emailSettingsForm');
   if (emailForm) emailForm.addEventListener('submit', onEmailSettingsSubmit);
+  const aiForm = document.getElementById('aiSettingsForm');
+  if (aiForm) aiForm.addEventListener('submit', onAiSettingsSubmit);
   const emailProviderSelect = document.getElementById('emailProvider');
   if (emailProviderSelect) {
     emailProviderSelect.addEventListener('change', onEmailProviderChange);
