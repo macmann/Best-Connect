@@ -66,15 +66,15 @@ router.post('/applications/:applicationId/ai-screening/run', async (req, res) =>
       return res.status(400).json({ success: false, error: 'cv_not_found_for_application' });
     }
 
+    console.log(
+      'Application CV paths:',
+      application.cvFilePathAbsolute,
+      application.cvFilePath,
+      application.cvPath
+    );
+
     let cvText;
     try {
-      console.log(
-        'Application CV paths:',
-        application.cvFilePathAbsolute,
-        application.cvFilePath,
-        application.cvPath
-      );
-
       cvText = await extractTextFromPdf(
         application.cvFilePathAbsolute ||
         application.cvFilePath ||
@@ -82,7 +82,20 @@ router.post('/applications/:applicationId/ai-screening/run', async (req, res) =>
       );
     } catch (err) {
       console.error('Failed to extract text from CV for manual screening:', err);
-      return res.status(500).json({ success: false, error: 'failed_to_read_cv' });
+
+      if (err && typeof err.message === 'string' && err.message.includes('CV file not found')) {
+        return res.status(404).json({
+          error: 'cv_not_found',
+          message:
+            'The CV file for this application is no longer available on the server. Please ask the candidate to re-upload their CV or submit a new application.'
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        error: 'cv_parse_failed',
+        message: 'Failed to extract CV text for AI screening.'
+      });
     }
 
     let aiScreeningResult;

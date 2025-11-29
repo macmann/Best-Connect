@@ -7,7 +7,7 @@ const repoRoot = path.join(__dirname, "..");
 
 function resolveCvPath(cvPath) {
   if (!cvPath) {
-    throw new Error("No CV path provided");
+    throw new Error("CV file not found: no CV path provided");
   }
 
   let p = cvPath.trim();
@@ -39,7 +39,7 @@ function resolveCvPath(cvPath) {
     }
 
     // Fallback: older deployments may have used /src/uploads vs /uploads or vice versa
-    let fallbackCandidates = [];
+    const fallbackCandidates = [];
 
     if (p.includes("/src/uploads/")) {
       const alt = p.replace("/src/uploads/", "/uploads/");

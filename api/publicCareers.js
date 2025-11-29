@@ -248,8 +248,7 @@ router.post('/positions/:id/apply', upload.single('cv'), async (req, res) => {
     console.log('Application CV path from DB:', savedApplication.cvFilePathAbsolute, savedApplication.cvFilePath || savedApplication.cvPath);
     const cvText = await extractTextFromPdf(
       savedApplication.cvFilePathAbsolute ||
-      savedApplication.cvFilePath ||
-      savedApplication.cvPath
+      savedApplication.cvFilePath
     );
     const positionForScreening = await database
       .collection('positions')
