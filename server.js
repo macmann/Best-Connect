@@ -19,6 +19,12 @@ const {
   claimRequest: claimPairingRequest,
   getRequestById: getPairRequestById
 } = require('./pairingStore');
+const {
+  DEFAULT_AI_SETTINGS,
+  getAiModelOptions,
+  loadAiSettings,
+  saveAiSettings
+} = require('./aiSettings');
 const recruitmentOpenApiSpec = require('./api/recruitmentopenAI');
 const hrPositionsRoutes = require('./api/hrPositions');
 const hrAiInterviewRoutes = require('./api/hrAiInterview');
@@ -3346,6 +3352,39 @@ init().then(async () => {
     } catch (err) {
       console.error('Failed to save email settings', err);
       res.status(500).json({ error: 'Unable to save email settings.' });
+    }
+  });
+
+  // ---- AI SETTINGS ----
+  app.get('/settings/ai', authRequired, managerOnly, async (req, res) => {
+    try {
+      const settings = await loadAiSettings({ force: true });
+      res.json({
+        settings,
+        defaults: DEFAULT_AI_SETTINGS,
+        modelOptions: getAiModelOptions()
+      });
+    } catch (err) {
+      console.error('Failed to load AI settings', err);
+      res.status(500).json({ error: 'Unable to load AI settings.' });
+    }
+  });
+
+  app.put('/settings/ai', authRequired, managerOnly, async (req, res) => {
+    try {
+      const payload = req.body || {};
+      const allowedModels = new Set(getAiModelOptions().map(option => option.value));
+      const model = typeof payload.model === 'string' && allowedModels.has(payload.model)
+        ? payload.model
+        : DEFAULT_AI_SETTINGS.model;
+      const questionPrompt = typeof payload.questionPrompt === 'string' ? payload.questionPrompt : undefined;
+      const screeningPrompt = typeof payload.screeningPrompt === 'string' ? payload.screeningPrompt : undefined;
+
+      const saved = await saveAiSettings({ model, questionPrompt, screeningPrompt });
+      res.json({ settings: saved, modelOptions: getAiModelOptions() });
+    } catch (err) {
+      console.error('Failed to save AI settings', err);
+      res.status(500).json({ error: 'Unable to save AI settings.' });
     }
   });
 

@@ -3,6 +3,7 @@ const { ObjectId } = require('mongodb');
 const { getDatabase } = require('../db');
 const { extractTextFromPdf } = require('../utils/cvParser');
 const { analyzeCvAgainstJd } = require('../openaiClient');
+const { loadAiSettings } = require('../aiSettings');
 
 const router = express.Router();
 
@@ -100,12 +101,19 @@ router.post('/applications/:applicationId/ai-screening/run', async (req, res) =>
 
     let aiScreeningResult;
     try {
-      aiScreeningResult = await analyzeCvAgainstJd({
-        cvText,
-        jdText: buildJdText(position),
-        positionTitle: position?.title,
-        candidateName: candidate?.fullName || candidate?.name
-      });
+      const aiSettings = await loadAiSettings();
+      aiScreeningResult = await analyzeCvAgainstJd(
+        {
+          cvText,
+          jdText: buildJdText(position),
+          positionTitle: position?.title,
+          candidateName: candidate?.fullName || candidate?.name
+        },
+        {
+          model: aiSettings.model,
+          screeningPrompt: aiSettings.screeningPrompt
+        }
+      );
     } catch (err) {
       console.error('AI CV screening failed (manual trigger):', err);
       return res.status(500).json({ success: false, error: 'failed_to_analyze_cv' });

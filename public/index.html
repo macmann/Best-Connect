@@ -2252,6 +2252,59 @@
 
         <div class="md-card">
           <div class="card-title">
+            <span class="material-symbols-rounded">smart_toy</span>
+            AI Configuration
+          </div>
+          <p class="card-subtitle">Choose the AI model and adjust the prompts used for question generation and screening.</p>
+          <form id="aiSettingsForm" class="settings-form">
+            <div class="settings-form__fields">
+              <label class="md-label" for="aiModel">AI model</label>
+              <div class="md-input-wrapper">
+                <span class="material-symbols-rounded">memory</span>
+                <select id="aiModel" class="md-input">
+                  <option value="gpt-5">GPT5</option>
+                  <option value="gpt-5.1-mini">GPT5.1 mini</option>
+                  <option value="gpt-5.1-nano">GPT5.1nano</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label" for="aiQuestionPrompt">Question generation prompt</label>
+              <div class="md-input-wrapper md-input-wrapper--textarea">
+                <span class="material-symbols-rounded">quiz</span>
+                <textarea
+                  id="aiQuestionPrompt"
+                  class="md-input md-input--textarea"
+                  rows="5"
+                  placeholder="Provide guidance for generating interview questions"
+                ></textarea>
+              </div>
+            </div>
+
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label" for="aiScreeningPrompt">Screening prompt</label>
+              <div class="md-input-wrapper md-input-wrapper--textarea">
+                <span class="material-symbols-rounded">fact_check</span>
+                <textarea
+                  id="aiScreeningPrompt"
+                  class="md-input md-input--textarea"
+                  rows="5"
+                  placeholder="Provide guidance for CV screening against the job description"
+                ></textarea>
+              </div>
+            </div>
+
+            <button type="submit" class="md-button md-button--filled md-button--small settings-form__submit">
+              <span class="material-symbols-rounded">save</span>
+              Save AI settings
+            </button>
+          </form>
+          <div id="aiSettingsStatus" class="settings-status text-muted"></div>
+        </div>
+
+        <div class="md-card">
+          <div class="card-title">
             <span class="material-symbols-rounded">mail</span>
             Email Notifications
           </div>

@@ -2,6 +2,7 @@ const express = require('express');
 const { ObjectId } = require('mongodb');
 const { getDatabase, db } = require('../db');
 const { generateInterviewQuestionsForPosition } = require('../openaiClient');
+const { loadAiSettings } = require('../aiSettings');
 
 const router = express.Router();
 
@@ -174,7 +175,11 @@ router.post('/positions/:id/ai-questions/generate', async (req, res) => {
       return res.status(404).json({ error: 'position_not_found' });
     }
 
-    const questions = await generateInterviewQuestionsForPosition(position);
+    const aiSettings = await loadAiSettings();
+    const questions = await generateInterviewQuestionsForPosition(position, {
+      model: aiSettings.model,
+      questionPrompt: aiSettings.questionPrompt
+    });
 
     return res.json({ questions });
   } catch (err) {
