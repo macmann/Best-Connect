@@ -28,6 +28,12 @@ const POST_LOGIN_TIMEOUT_MS = 5000;
 const CHAT_WIDGET_URL =
   'https://qa.atenxion.ai/chat-widget?agentchainId=6900712037c0ed036821b334';
 const INACTIVE_EMPLOYEE_STATUSES = new Set(['inactive', 'deactivated', 'disabled', 'terminated']);
+const SUPPORTED_LEAVE_TYPES = ['annual', 'casual', 'medical'];
+const DEFAULT_LEAVE_BALANCE_CONFIG = {
+  annual: { yearlyAllocation: 10, monthlyAccrual: 10 / 12 },
+  casual: { yearlyAllocation: 5, monthlyAccrual: 5 / 12 },
+  medical: { yearlyAllocation: 14, monthlyAccrual: 14 / 12 }
+};
 const LOCATION_COLORS = ['#6366f1', '#22c55e', '#06b6d4', '#f97316', '#a855f7', '#f43f5e', '#10b981', '#a3e635'];
 
 function normalizeRole(role) {
@@ -56,6 +62,27 @@ function isEmployeeActive(employee) {
   const statusKey = Object.keys(employee).find(key => key.toLowerCase() === 'status');
   const statusValue = statusKey ? employee[statusKey] : '';
   return isActiveEmployeeStatus(statusValue);
+}
+
+function getLeaveBalanceValue(leaveBalances = {}, type) {
+  if (!type) return 0;
+  const entry = leaveBalances[type];
+  if (entry && typeof entry === 'object') {
+    const value = Number(entry.balance);
+    return Number.isFinite(value) ? value : 0;
+  }
+  const numeric = Number(entry);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function buildLeaveBalanceEntry(balance, type) {
+  const defaults = DEFAULT_LEAVE_BALANCE_CONFIG[type] || { yearlyAllocation: 0, monthlyAccrual: 0 };
+  const numericBalance = Number(balance);
+  return {
+    balance: Number.isFinite(numericBalance) ? numericBalance : 0,
+    yearlyAllocation: defaults.yearlyAllocation,
+    monthlyAccrual: defaults.monthlyAccrual
+  };
 }
 
 function normalizeInternFlag(value) {
@@ -1619,11 +1646,11 @@ function renderMyProfile() {
   setProfileSummaryField('profileSummaryStatus', summary.status);
 
   const annualEl = document.getElementById('profileBalAnnual');
-  if (annualEl) annualEl.textContent = leaveBalances?.annual ?? '-';
+  if (annualEl) annualEl.textContent = getLeaveBalanceValue(leaveBalances, 'annual');
   const casualEl = document.getElementById('profileBalCasual');
-  if (casualEl) casualEl.textContent = leaveBalances?.casual ?? '-';
+  if (casualEl) casualEl.textContent = getLeaveBalanceValue(leaveBalances, 'casual');
   const medicalEl = document.getElementById('profileBalMedical');
-  if (medicalEl) medicalEl.textContent = leaveBalances?.medical ?? '-';
+  if (medicalEl) medicalEl.textContent = getLeaveBalanceValue(leaveBalances, 'medical');
 
   const container = document.getElementById('profileSections');
   if (container) {
@@ -5090,15 +5117,19 @@ async function onEmployeeChange() {
   if (!emp) return;
 
   // === NEW: Show current leave balances (no deduction here, backend handles it) ===
-  balAnnual.textContent = emp.leaveBalances.annual;
-  balCasual.textContent = emp.leaveBalances.casual;
-  balMedical.textContent = emp.leaveBalances.medical;
+  const annualBalance = getLeaveBalanceValue(emp.leaveBalances, 'annual');
+  const casualBalance = getLeaveBalanceValue(emp.leaveBalances, 'casual');
+  const medicalBalance = getLeaveBalanceValue(emp.leaveBalances, 'medical');
+
+  balAnnual.textContent = annualBalance;
+  balCasual.textContent = casualBalance;
+  balMedical.textContent = medicalBalance;
 
   // Set leave type options
   typeSel.innerHTML = `
-    <option value="annual">Annual (${emp.leaveBalances.annual} days)</option>
-    <option value="casual">Casual (${emp.leaveBalances.casual} days)</option>
-    <option value="medical">Medical (${emp.leaveBalances.medical} days)</option>
+    <option value="annual">Annual (${annualBalance} days)</option>
+    <option value="casual">Casual (${casualBalance} days)</option>
+    <option value="medical">Medical (${medicalBalance} days)</option>
   `;
 
   // Show previous leaves
@@ -6321,14 +6352,19 @@ function buildEmployeePayload(formEl, fields = []) {
     ? fields.filter(field => field && field.isLeaveBalance).map(field => field.key)
     : [];
   if (!leaveKeys.length) {
-    leaveKeys = ['annual', 'casual', 'medical'].filter(key => Object.prototype.hasOwnProperty.call(payload, key));
+    leaveKeys = SUPPORTED_LEAVE_TYPES.filter(key =>
+      Object.prototype.hasOwnProperty.call(payload, key)
+    );
   }
   if (leaveKeys.length) {
-    payload.leaveBalances = {};
+    payload.leaveBalances = {
+      accrualStartDate: null,
+      nextAccrualMonth: null
+    };
     leaveKeys.forEach(key => {
       const raw = data[key];
       const num = Number(raw === '' || typeof raw === 'undefined' ? 0 : raw);
-      payload.leaveBalances[key] = Number.isNaN(num) ? 0 : num;
+      payload.leaveBalances[key] = buildLeaveBalanceEntry(Number.isNaN(num) ? 0 : num, key);
       delete payload[key];
     });
   }
@@ -6432,8 +6468,16 @@ async function getDynamicEmployeeFields() {
   let sample = emps[0] || {};
   let leaveFields = [];
   if (sample.leaveBalances) {
-    Object.entries(sample.leaveBalances).forEach(([k,v])=>{
-      leaveFields.push({key:k,label:k.charAt(0).toUpperCase()+k.slice(1)+' Leave',type:'number',required:false,isLeaveBalance:true});
+    SUPPORTED_LEAVE_TYPES.forEach(key => {
+      if (Object.prototype.hasOwnProperty.call(sample.leaveBalances, key)) {
+        leaveFields.push({
+          key,
+          label: key.charAt(0).toUpperCase() + key.slice(1) + ' Leave',
+          type: 'number',
+          required: false,
+          isLeaveBalance: true
+        });
+      }
     });
   }
   const managerOptions = await fetchManagerOptions();
@@ -6521,9 +6565,11 @@ async function onEmpFormSubmit(ev) {
     name: document.getElementById('empName').value,
     status: document.getElementById('empStatus').value,
     leaveBalances: {
-      annual:  +document.getElementById('empAnnual').value,
-      casual:  +document.getElementById('empCasual').value,
-      medical: +document.getElementById('empMedical').value
+      annual: buildLeaveBalanceEntry(+document.getElementById('empAnnual').value, 'annual'),
+      casual: buildLeaveBalanceEntry(+document.getElementById('empCasual').value, 'casual'),
+      medical: buildLeaveBalanceEntry(+document.getElementById('empMedical').value, 'medical'),
+      accrualStartDate: null,
+      nextAccrualMonth: null
     }
   };
   const url    = editId ? `/employees/${editId}` : '/employees';
