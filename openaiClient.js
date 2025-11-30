@@ -5,6 +5,16 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
+function getCvAnalysisModel() {
+  // Highest priority: explicit override
+  if (process.env.OPENAI_CV_MODEL && process.env.OPENAI_CV_MODEL.trim()) {
+    return process.env.OPENAI_CV_MODEL.trim();
+  }
+
+  // Default model for CV screening
+  return "gpt-5-mini-2025-08-07";
+}
+
 async function generateInterviewQuestionsForPosition(position, options = {}) {
   const { title, description, department, employmentType } = position;
   const promptIntro = options.questionPrompt || DEFAULT_AI_SETTINGS.questionPrompt;
@@ -132,20 +142,51 @@ CV TEXT:
 --------
 ${cvText}`;
 
-  const completion = await client.chat.completions.create({
-    model: options.model || process.env.OPENAI_CV_MODEL || "gpt-5.1-mini",
-    messages: [
-      {
-        role: "system",
-        content: "You are a precise HR assistant. You ONLY respond with strict JSON matching the requested schema. No markdown, no commentary."
-      },
-      {
-        role: "user",
-        content: prompt
-      }
-    ],
-    temperature: 0.2,
-  });
+  const primaryModel = getCvAnalysisModel();
+  let completion;
+
+  try {
+    completion = await client.chat.completions.create({
+      model: primaryModel,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a precise HR assistant. You ONLY respond with strict JSON matching the requested schema. No markdown, no commentary."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      temperature: 0.2,
+    });
+  } catch (err) {
+    if (err && err.code === "model_not_found") {
+      console.warn(
+        "Primary CV screening model not found:", primaryModel,
+        "— retrying with fallback model gpt-4o-mini"
+      );
+
+      completion = await client.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a precise HR assistant. You ONLY respond with strict JSON matching the requested schema. No markdown, no commentary."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: 0.2,
+      });
+    } else {
+      throw err;
+    }
+  }
 
   let content = completion.choices[0]?.message?.content?.trim();
   if (!content) {
@@ -166,4 +207,8 @@ ${cvText}`;
   }
 }
 
-module.exports = { generateInterviewQuestionsForPosition, analyzeInterviewResponses, analyzeCvAgainstJd };
+module.exports = {
+  generateInterviewQuestionsForPosition,
+  analyzeInterviewResponses,
+  analyzeCvAgainstJd,
+};
