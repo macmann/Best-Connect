@@ -1989,6 +1989,8 @@ async function ensureUsersForExistingEmployees() {
 }
 
 async function migrateLeaveSystemOnStartup() {
+  console.log('Running startup leave migration to normalize leave balances...');
+
   try {
     const { totalEmployees, updatedCount } = await migrateLeaveSystem({ forceRead: true });
 
@@ -2003,6 +2005,7 @@ async function migrateLeaveSystemOnStartup() {
     }
   } catch (error) {
     console.error('Startup leave migration failed:', error);
+    throw error;
   }
 }
 
