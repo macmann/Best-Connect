@@ -837,6 +837,7 @@ function escapeHtml(str) {
 function showPanel(name) {
   const profileBtn = document.getElementById('tabProfile');
   const portalBtn   = document.getElementById('tabPortal');
+  const performanceBtn = document.getElementById('tabPerformance');
   const manageBtn   = document.getElementById('tabManage');
   const recruitmentBtn = document.getElementById('tabRecruitment');
   const managerBtn  = document.getElementById('tabManagerApps');
@@ -846,6 +847,7 @@ function showPanel(name) {
   const financeBtn = document.getElementById('tabFinance');
   const profilePanel = document.getElementById('profilePanel');
   const portalPanel = document.getElementById('portalPanel');
+  const performancePanel = document.getElementById('performancePanel');
   const managePanel = document.getElementById('managePanel');
   const recruitmentPanel = document.getElementById('recruitmentPanel');
   const managerPanel = document.getElementById('managerAppsPanel');
@@ -854,10 +856,12 @@ function showPanel(name) {
   const settingsPanel = document.getElementById('settingsPanel');
   const financePanel = document.getElementById('financePanel');
 
-  [profileBtn, portalBtn, manageBtn, recruitmentBtn, managerBtn, reportBtn, locationBtn, settingsBtn, financeBtn].forEach(btn => btn && btn.classList.remove('active-tab'));
+  [profileBtn, portalBtn, performanceBtn, manageBtn, recruitmentBtn, managerBtn, reportBtn, locationBtn, settingsBtn, financeBtn].forEach(btn =>
+ btn && btn.classList.remove('active-tab'));
 
   if (profilePanel) profilePanel.classList.add('hidden');
   portalPanel.classList.add('hidden');
+  if (performancePanel) performancePanel.classList.add('hidden');
   managePanel.classList.add('hidden');
   recruitmentPanel.classList.add('hidden');
   managerPanel.classList.add('hidden');
@@ -874,6 +878,10 @@ function showPanel(name) {
   if (name === 'portal') {
     portalPanel.classList.remove('hidden');
     portalBtn.classList.add('active-tab');
+  }
+  if (name === 'performance' && performancePanel) {
+    performancePanel.classList.remove('hidden');
+    if (performanceBtn) performanceBtn.classList.add('active-tab');
   }
   if (name === 'manage') {
     managePanel.classList.remove('hidden');
@@ -929,7 +937,7 @@ function showPanel(name) {
   }
 
   const primaryTabSelect = document.getElementById('primaryTabSelect');
-  if (primaryTabSelect && (name === 'profile' || name === 'portal')) {
+  if (primaryTabSelect && (name === 'profile' || name === 'portal' || name === 'performance')) {
     primaryTabSelect.value = name;
   }
 }
@@ -4800,6 +4808,8 @@ async function init() {
   const profileTabBtn = document.getElementById('tabProfile');
   if (profileTabBtn) profileTabBtn.onclick = () => showPanel('profile');
   document.getElementById('tabPortal').onclick = () => showPanel('portal');
+  const performanceTab = document.getElementById('tabPerformance');
+  if (performanceTab) performanceTab.onclick = () => showPanel('performance');
   document.getElementById('tabManage').onclick = () => showPanel('manage');
   const recruitmentTab = document.getElementById('tabRecruitment');
   if (recruitmentTab) recruitmentTab.onclick = () => showPanel('recruitment');
