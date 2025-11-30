@@ -176,6 +176,16 @@ const MS_REDIRECT_URI = process.env.MS_REDIRECT_URI ||
 // ---- EMAIL SETUP ----
 const EMAIL_SETTINGS_CACHE_MS = 60 * 1000;
 const DEFAULT_OAUTH_SCOPE = 'https://outlook.office365.com/.default';
+const DEFAULT_LEAVE_EMAIL_TEMPLATES = {
+  requestSubject: 'Leave request from {name}',
+  requestBody: '{name} applied for {type} leave from {from} to {to}.',
+  approveSubject: 'Leave approved',
+  approveBody: '{name}, your leave from {from} to {to} has been approved.',
+  rejectSubject: 'Leave rejected',
+  rejectBody: '{name}, your leave from {from} to {to} has been rejected.',
+  cancelSubject: 'Leave cancelled',
+  cancelBody: '{name}, your leave from {from} to {to} has been cancelled.'
+};
 
 function getEnvEmailSettings() {
   const host = process.env.SMTP_HOST || '';
@@ -238,7 +248,8 @@ function normalizeEmailSettings(raw) {
     oauthClientSecret: '',
     oauthScope: DEFAULT_OAUTH_SCOPE,
     oauthRefreshToken: '',
-    oauthGrantType: 'client_credentials'
+    oauthGrantType: 'client_credentials',
+    templates: { ...DEFAULT_LEAVE_EMAIL_TEMPLATES }
   };
   const envSettings = getEnvEmailSettings();
   const result = { ...defaults, ...envSettings };
@@ -303,7 +314,21 @@ function normalizeEmailSettings(raw) {
   } else if (!result.provider) {
     result.provider = 'custom';
   }
+  result.templates = normalizeEmailTemplates(raw?.templates || result.templates);
   return result;
+}
+
+function normalizeEmailTemplates(raw) {
+  const templates = { ...DEFAULT_LEAVE_EMAIL_TEMPLATES };
+  if (raw && typeof raw === 'object') {
+    Object.entries(templates).forEach(([key]) => {
+      const value = raw[key];
+      if (typeof value === 'string' && value.trim()) {
+        templates[key] = value.trim();
+      }
+    });
+  }
+  return templates;
 }
 
 let emailSettingsCache = { config: null, loadedAt: 0 };
@@ -548,6 +573,15 @@ async function sendEmail(to, subject, text) {
   } catch (err) {
     console.error('Failed to send email', err);
   }
+}
+
+function renderTemplate(template, variables = {}) {
+  if (!template || typeof template !== 'string') return '';
+  return template.replace(/\{\{?\s*(\w+)\s*\}?}/g, (_, key) => {
+    const value = variables[key];
+    if (value === undefined || value === null) return '';
+    return String(value);
+  });
 }
 
 app.locals.sendEmail = sendEmail;
@@ -3272,6 +3306,7 @@ init().then(async () => {
         ? payload.oauthGrantType.trim().toLowerCase()
         : '';
       const oauthGrantType = oauthGrantTypeRaw === 'refresh_token' ? 'refresh_token' : 'client_credentials';
+      const templates = normalizeEmailTemplates(payload.templates);
       const recipientsRaw = Array.isArray(payload.recipients)
         ? payload.recipients
         : typeof payload.recipients === 'string'
@@ -3326,7 +3361,8 @@ init().then(async () => {
         oauthClientSecret: storedClientSecret,
         oauthScope,
         oauthRefreshToken: storedRefreshToken,
-        oauthGrantType
+        oauthGrantType,
+        templates
       };
 
       db.data.settings.email = storedConfig;
@@ -4072,10 +4108,17 @@ init().then(async () => {
 
     const recipientEmails = Array.from(recipientSet.values());
     if (recipientEmails.length) {
+      const templates = emailConfig?.templates || DEFAULT_LEAVE_EMAIL_TEMPLATES;
+      const templateVars = {
+        name,
+        type: normalizedType,
+        from: normalizedFrom,
+        to: normalizedTo
+      };
       await sendEmail(
         recipientEmails,
-        `Leave request from ${name}`,
-        `${name} applied for ${normalizedType} leave from ${normalizedFrom} to ${normalizedTo}.`
+        renderTemplate(templates.requestSubject, templateVars),
+        renderTemplate(templates.requestBody, templateVars)
       );
     }
 
@@ -5197,10 +5240,17 @@ init().then(async () => {
     const email = getEmpEmail(emp);
     const name = emp?.name || email || `Employee ${db.data.applications[appIdx].employeeId}`;
     if (email) {
+      const templates = (await loadEmailSettings())?.templates || DEFAULT_LEAVE_EMAIL_TEMPLATES;
+      const templateVars = {
+        name,
+        type: db.data.applications[appIdx].type,
+        from: db.data.applications[appIdx].from,
+        to: db.data.applications[appIdx].to
+      };
       await sendEmail(
         email,
-        'Leave approved',
-        `${name}, your leave from ${db.data.applications[appIdx].from} to ${db.data.applications[appIdx].to} has been approved.`
+        renderTemplate(templates.approveSubject, templateVars),
+        renderTemplate(templates.approveBody, templateVars)
       );
     }
 
@@ -5237,10 +5287,12 @@ init().then(async () => {
     const email = getEmpEmail(emp);
     const name = emp?.name || email || `Employee ${app.employeeId}`;
     if (email) {
+      const templates = (await loadEmailSettings())?.templates || DEFAULT_LEAVE_EMAIL_TEMPLATES;
+      const templateVars = { name, type: app.type, from: app.from, to: app.to };
       await sendEmail(
         email,
-        'Leave rejected',
-        `${name}, your leave from ${app.from} to ${app.to} has been rejected.`
+        renderTemplate(templates.rejectSubject, templateVars),
+        renderTemplate(templates.rejectBody, templateVars)
       );
     }
 
@@ -5285,10 +5337,17 @@ init().then(async () => {
     const email = getEmpEmail(emp);
     const name = emp?.name || email || `Employee ${appObjApp.employeeId}`;
     if (email) {
+      const templates = (await loadEmailSettings())?.templates || DEFAULT_LEAVE_EMAIL_TEMPLATES;
+      const templateVars = {
+        name,
+        type: appObjApp.type,
+        from: appObjApp.from,
+        to: appObjApp.to
+      };
       await sendEmail(
         email,
-        'Leave cancelled',
-        `${name}, your leave from ${appObjApp.from} to ${appObjApp.to} has been cancelled.`
+        renderTemplate(templates.cancelSubject, templateVars),
+        renderTemplate(templates.cancelBody, templateVars)
       );
     }
 

@@ -2420,6 +2420,67 @@
               <div id="emailRecipients" class="email-recipient-list"></div>
             </div>
             <div class="settings-form__help" id="emailRecipientsHelp">Select which managers should receive leave notification emails.</div>
+            <div class="settings-form__divider"></div>
+            <div class="settings-form__fields settings-form__fields--full">
+              <span class="md-label">Leave notification templates</span>
+              <p class="settings-form__help">Use placeholders <code>{name}</code>, <code>{type}</code>, <code>{from}</code>, and <code>{to}</code> to personalize each message.</p>
+            </div>
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label" for="emailTemplateRequestSubject">New request subject</label>
+              <div class="md-input-wrapper">
+                <span class="material-symbols-rounded">subject</span>
+                <input type="text" id="emailTemplateRequestSubject" class="md-input" placeholder="Leave request from {name}">
+              </div>
+            </div>
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label" for="emailTemplateRequestBody">New request body</label>
+              <div class="md-input-wrapper md-input-wrapper--textarea">
+                <span class="material-symbols-rounded">notes</span>
+                <textarea id="emailTemplateRequestBody" class="md-input md-input--textarea" rows="3" placeholder="{name} applied for {type} leave from {from} to {to}."></textarea>
+              </div>
+            </div>
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label" for="emailTemplateApproveSubject">Approval subject</label>
+              <div class="md-input-wrapper">
+                <span class="material-symbols-rounded">check_circle</span>
+                <input type="text" id="emailTemplateApproveSubject" class="md-input" placeholder="Leave approved">
+              </div>
+            </div>
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label" for="emailTemplateApproveBody">Approval body</label>
+              <div class="md-input-wrapper md-input-wrapper--textarea">
+                <span class="material-symbols-rounded">mail</span>
+                <textarea id="emailTemplateApproveBody" class="md-input md-input--textarea" rows="3" placeholder="{name}, your leave from {from} to {to} has been approved."></textarea>
+              </div>
+            </div>
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label" for="emailTemplateRejectSubject">Rejection subject</label>
+              <div class="md-input-wrapper">
+                <span class="material-symbols-rounded">cancel</span>
+                <input type="text" id="emailTemplateRejectSubject" class="md-input" placeholder="Leave rejected">
+              </div>
+            </div>
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label" for="emailTemplateRejectBody">Rejection body</label>
+              <div class="md-input-wrapper md-input-wrapper--textarea">
+                <span class="material-symbols-rounded">sms_failed</span>
+                <textarea id="emailTemplateRejectBody" class="md-input md-input--textarea" rows="3" placeholder="{name}, your leave from {from} to {to} has been rejected."></textarea>
+              </div>
+            </div>
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label" for="emailTemplateCancelSubject">Cancellation subject</label>
+              <div class="md-input-wrapper">
+                <span class="material-symbols-rounded">undo</span>
+                <input type="text" id="emailTemplateCancelSubject" class="md-input" placeholder="Leave cancelled">
+              </div>
+            </div>
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label" for="emailTemplateCancelBody">Cancellation body</label>
+              <div class="md-input-wrapper md-input-wrapper--textarea">
+                <span class="material-symbols-rounded">outgoing_mail</span>
+                <textarea id="emailTemplateCancelBody" class="md-input md-input--textarea" rows="3" placeholder="{name}, your leave from {from} to {to} has been cancelled."></textarea>
+              </div>
+            </div>
             <div class="settings-form__help" id="emailPasswordHelp">Password is stored securely. Leave blank to keep the current password.</div>
             <div class="settings-form__help auth-section auth-section--oauth hidden" id="emailOAuthClientSecretHelp">Client secret is stored securely. Leave blank to keep the current value.</div>
             <div class="settings-form__help auth-section auth-section--oauth hidden" id="emailOAuthRefreshTokenHelp">Provide a refresh token only if using delegated permissions. Leave blank to keep the current value.</div>

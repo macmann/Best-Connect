@@ -441,6 +441,16 @@ let currentHireFields = [];
 let activeAiInterviewApplicationId = null;
 let profileData = null;
 let profileLoading = null;
+const DEFAULT_LEAVE_EMAIL_TEMPLATES = {
+  requestSubject: 'Leave request from {name}',
+  requestBody: '{name} applied for {type} leave from {from} to {to}.',
+  approveSubject: 'Leave approved',
+  approveBody: '{name}, your leave from {from} to {to} has been approved.',
+  rejectSubject: 'Leave rejected',
+  rejectBody: '{name}, your leave from {from} to {to} has been rejected.',
+  cancelSubject: 'Leave cancelled',
+  cancelBody: '{name}, your leave from {from} to {to} has been cancelled.'
+};
 let emailSettings = null;
 let emailSettingsLoaded = false;
 let emailSettingsLoading = null;
@@ -2161,6 +2171,14 @@ function renderEmailSettingsForm() {
   const help = document.getElementById('emailPasswordHelp');
   const oauthClientSecretHelp = document.getElementById('emailOAuthClientSecretHelp');
   const oauthRefreshTokenHelp = document.getElementById('emailOAuthRefreshTokenHelp');
+  const templateRequestSubject = document.getElementById('emailTemplateRequestSubject');
+  const templateRequestBody = document.getElementById('emailTemplateRequestBody');
+  const templateApproveSubject = document.getElementById('emailTemplateApproveSubject');
+  const templateApproveBody = document.getElementById('emailTemplateApproveBody');
+  const templateRejectSubject = document.getElementById('emailTemplateRejectSubject');
+  const templateRejectBody = document.getElementById('emailTemplateRejectBody');
+  const templateCancelSubject = document.getElementById('emailTemplateCancelSubject');
+  const templateCancelBody = document.getElementById('emailTemplateCancelBody');
   const settings = emailSettings || {};
   if (enabledInput) enabledInput.checked = Boolean(settings.enabled);
   const provider = settings.provider === 'office365' ? 'office365' : 'custom';
@@ -2256,6 +2274,18 @@ function renderEmailSettingsForm() {
       ? 'Refresh token is hidden. Enter a new value to update it.'
       : 'Provide a delegated refresh token if your app uses delegated permissions.';
   }
+  const templates = {
+    ...DEFAULT_LEAVE_EMAIL_TEMPLATES,
+    ...(settings.templates && typeof settings.templates === 'object' ? settings.templates : {})
+  };
+  if (templateRequestSubject) templateRequestSubject.value = templates.requestSubject || '';
+  if (templateRequestBody) templateRequestBody.value = templates.requestBody || '';
+  if (templateApproveSubject) templateApproveSubject.value = templates.approveSubject || '';
+  if (templateApproveBody) templateApproveBody.value = templates.approveBody || '';
+  if (templateRejectSubject) templateRejectSubject.value = templates.rejectSubject || '';
+  if (templateRejectBody) templateRejectBody.value = templates.rejectBody || '';
+  if (templateCancelSubject) templateCancelSubject.value = templates.cancelSubject || '';
+  if (templateCancelBody) templateCancelBody.value = templates.cancelBody || '';
   if (provider !== 'office365') {
     rememberCustomEmailSettings();
   }
@@ -2355,6 +2385,14 @@ async function onEmailSettingsSubmit(ev) {
     const oauthScopeInput = document.getElementById('emailOAuthScope');
     const oauthClientSecretInput = document.getElementById('emailOAuthClientSecret');
     const oauthRefreshTokenInput = document.getElementById('emailOAuthRefreshToken');
+    const templateRequestSubject = document.getElementById('emailTemplateRequestSubject');
+    const templateRequestBody = document.getElementById('emailTemplateRequestBody');
+    const templateApproveSubject = document.getElementById('emailTemplateApproveSubject');
+    const templateApproveBody = document.getElementById('emailTemplateApproveBody');
+    const templateRejectSubject = document.getElementById('emailTemplateRejectSubject');
+    const templateRejectBody = document.getElementById('emailTemplateRejectBody');
+    const templateCancelSubject = document.getElementById('emailTemplateCancelSubject');
+    const templateCancelBody = document.getElementById('emailTemplateCancelBody');
     const recipientInputs = Array.from(document.querySelectorAll('input[name="emailRecipients"]'));
     const selectedRecipients = recipientInputs
       .filter(input => input instanceof HTMLInputElement && input.checked)
@@ -2379,7 +2417,17 @@ async function onEmailSettingsSubmit(ev) {
       updateClientSecret: oauthClientSecretInput?.dataset?.dirty === 'true',
       oauthClientSecret: oauthClientSecretInput?.value || '',
       updateRefreshToken: oauthRefreshTokenInput?.dataset?.dirty === 'true',
-      oauthRefreshToken: oauthRefreshTokenInput?.value || ''
+      oauthRefreshToken: oauthRefreshTokenInput?.value || '',
+      templates: {
+        requestSubject: templateRequestSubject?.value?.trim() || DEFAULT_LEAVE_EMAIL_TEMPLATES.requestSubject,
+        requestBody: templateRequestBody?.value?.trim() || DEFAULT_LEAVE_EMAIL_TEMPLATES.requestBody,
+        approveSubject: templateApproveSubject?.value?.trim() || DEFAULT_LEAVE_EMAIL_TEMPLATES.approveSubject,
+        approveBody: templateApproveBody?.value?.trim() || DEFAULT_LEAVE_EMAIL_TEMPLATES.approveBody,
+        rejectSubject: templateRejectSubject?.value?.trim() || DEFAULT_LEAVE_EMAIL_TEMPLATES.rejectSubject,
+        rejectBody: templateRejectBody?.value?.trim() || DEFAULT_LEAVE_EMAIL_TEMPLATES.rejectBody,
+        cancelSubject: templateCancelSubject?.value?.trim() || DEFAULT_LEAVE_EMAIL_TEMPLATES.cancelSubject,
+        cancelBody: templateCancelBody?.value?.trim() || DEFAULT_LEAVE_EMAIL_TEMPLATES.cancelBody
+      }
     };
     const wantsRefreshToken = payload.updateRefreshToken
       ? Boolean(payload.oauthRefreshToken)
