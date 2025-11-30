@@ -84,7 +84,26 @@ app.options(
 );
 
 // Default leave balance values assigned to new employees
-const DEFAULT_LEAVE_BALANCES = { annual: 10, casual: 5, medical: 14 };
+const DEFAULT_LEAVE_BALANCES = {
+  annual: {
+    balance: 0,
+    yearlyAllocation: 10,
+    monthlyAccrual: 10 / 12
+  },
+  casual: {
+    balance: 0,
+    yearlyAllocation: 5,
+    monthlyAccrual: 5 / 12
+  },
+  medical: {
+    balance: 0,
+    yearlyAllocation: 14,
+    monthlyAccrual: 14 / 12
+  },
+  accrualStartDate: null,
+  nextAccrualMonth: null
+};
+const SUPPORTED_LEAVE_TYPES = ['annual', 'casual', 'medical'];
 
 // Payload limit for incoming requests (default 3 MB to accommodate CV uploads)
 const BODY_LIMIT = process.env.BODY_LIMIT || '3mb';
@@ -829,33 +848,111 @@ function assignEmployeeNumber(employee, employees = []) {
   employee[preferredKey] = nextNumber;
 }
 
+function cloneDefaultLeaveBalances() {
+  return {
+    annual: { ...DEFAULT_LEAVE_BALANCES.annual },
+    casual: { ...DEFAULT_LEAVE_BALANCES.casual },
+    medical: { ...DEFAULT_LEAVE_BALANCES.medical },
+    accrualStartDate: DEFAULT_LEAVE_BALANCES.accrualStartDate,
+    nextAccrualMonth: DEFAULT_LEAVE_BALANCES.nextAccrualMonth
+  };
+}
+
+function normalizeLeaveBalanceEntry(entry, defaults) {
+  const baseDefaults = defaults || { balance: 0, yearlyAllocation: 0, monthlyAccrual: 0 };
+  const balanceValue = Number(
+    typeof entry === 'object' && entry !== null && 'balance' in entry
+      ? entry.balance
+      : entry
+  );
+
+  const yearlyAllocation = Number(
+    typeof entry === 'object' && entry !== null && 'yearlyAllocation' in entry
+      ? entry.yearlyAllocation
+      : baseDefaults.yearlyAllocation
+  );
+
+  const monthlyAccrual = Number(
+    typeof entry === 'object' && entry !== null && 'monthlyAccrual' in entry
+      ? entry.monthlyAccrual
+      : baseDefaults.monthlyAccrual
+  );
+
+  return {
+    balance: Number.isFinite(balanceValue) ? balanceValue : baseDefaults.balance,
+    yearlyAllocation: Number.isFinite(yearlyAllocation)
+      ? yearlyAllocation
+      : baseDefaults.yearlyAllocation,
+    monthlyAccrual: Number.isFinite(monthlyAccrual)
+      ? monthlyAccrual
+      : baseDefaults.monthlyAccrual
+  };
+}
+
+function normalizeNullableDate(value) {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getLeaveBalanceValue(leaveBalances, type) {
+  if (!leaveBalances || typeof leaveBalances !== 'object') return 0;
+  const entry = leaveBalances[type];
+  if (entry && typeof entry === 'object') {
+    return Number(entry.balance) || 0;
+  }
+  const numeric = Number(entry);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function setLeaveBalanceValue(leaveBalances, type, value) {
+  if (!leaveBalances || typeof leaveBalances !== 'object') return;
+  const defaults = DEFAULT_LEAVE_BALANCES[type] || { balance: 0, yearlyAllocation: 0, monthlyAccrual: 0 };
+  const normalized = normalizeLeaveBalanceEntry(
+    typeof value === 'object' && value !== null ? value.balance ?? value : value,
+    defaults
+  );
+  if (!leaveBalances[type] || typeof leaveBalances[type] !== 'object') {
+    leaveBalances[type] = { ...defaults, ...normalized };
+    return;
+  }
+  leaveBalances[type] = { ...leaveBalances[type], ...normalized };
+}
+
 function ensureLeaveBalances(emp) {
   if (!emp) return false;
   if (!emp.leaveBalances || typeof emp.leaveBalances !== 'object') {
-    emp.leaveBalances = { ...DEFAULT_LEAVE_BALANCES };
+    emp.leaveBalances = cloneDefaultLeaveBalances();
     return true;
   }
 
   let updated = false;
-  Object.entries(DEFAULT_LEAVE_BALANCES).forEach(([key, defaultValue]) => {
-    const current = emp.leaveBalances[key];
-    if (current === undefined || current === null || current === '') {
-      emp.leaveBalances[key] = defaultValue;
-      updated = true;
-      return;
-    }
-
-    const numericValue = Number(current);
-    if (!Number.isFinite(numericValue)) {
-      if (emp.leaveBalances[key] !== defaultValue) {
-        emp.leaveBalances[key] = defaultValue;
-        updated = true;
-      }
-    } else if (emp.leaveBalances[key] !== numericValue) {
-      emp.leaveBalances[key] = numericValue;
+  SUPPORTED_LEAVE_TYPES.forEach(type => {
+    const defaults = DEFAULT_LEAVE_BALANCES[type];
+    const current = emp.leaveBalances[type];
+    const normalized = normalizeLeaveBalanceEntry(current, defaults);
+    if (
+      !current ||
+      typeof current !== 'object' ||
+      current.balance !== normalized.balance ||
+      current.yearlyAllocation !== normalized.yearlyAllocation ||
+      current.monthlyAccrual !== normalized.monthlyAccrual
+    ) {
+      emp.leaveBalances[type] = { ...defaults, ...normalized };
       updated = true;
     }
   });
+
+  const accrualStartDate = normalizeNullableDate(emp.leaveBalances.accrualStartDate);
+  const nextAccrualMonth = normalizeNullableDate(emp.leaveBalances.nextAccrualMonth);
+  if (emp.leaveBalances.accrualStartDate !== accrualStartDate) {
+    emp.leaveBalances.accrualStartDate = accrualStartDate;
+    updated = true;
+  }
+  if (emp.leaveBalances.nextAccrualMonth !== nextAccrualMonth) {
+    emp.leaveBalances.nextAccrualMonth = nextAccrualMonth;
+    updated = true;
+  }
 
   return updated;
 }
@@ -990,10 +1087,15 @@ function buildEmployeeProfile(employee) {
     employeeId: employee?.id || null,
     name: employee?.name || '',
     email: getEmpEmail(employee),
-    leaveBalances:
-      employee?.leaveBalances && typeof employee.leaveBalances === 'object'
-        ? employee.leaveBalances
-        : { ...DEFAULT_LEAVE_BALANCES },
+    leaveBalances: (() => {
+      const leaveCopy =
+        employee?.leaveBalances && typeof employee.leaveBalances === 'object'
+          ? { ...employee.leaveBalances }
+          : cloneDefaultLeaveBalances();
+      const wrapper = { leaveBalances: leaveCopy };
+      ensureLeaveBalances(wrapper);
+      return wrapper.leaveBalances;
+    })(),
     summary: {
       title: findValueByKeywords(employee, ['title', 'position']),
       department: findValueByKeywords(employee, ['department', 'project']),
@@ -1068,7 +1170,7 @@ function buildUserInfoLookupOpenApiPath() {
 }
 
 function buildLeaveApplicationSchemas() {
-  const leaveTypes = Object.keys(DEFAULT_LEAVE_BALANCES);
+  const leaveTypes = SUPPORTED_LEAVE_TYPES;
   return {
     EmployeeScopedRequest: {
       type: 'object',
@@ -4011,7 +4113,7 @@ init().then(async () => {
       return { status: 403, error: 'Cannot apply for another employee' };
     }
 
-    const supportedTypes = Object.keys(DEFAULT_LEAVE_BALANCES);
+    const supportedTypes = SUPPORTED_LEAVE_TYPES;
     const normalizedType = typeof type === 'string' ? type.trim().toLowerCase() : '';
     if (!supportedTypes.includes(normalizedType)) {
       return { status: 400, error: 'Unsupported leave type.' };
@@ -4041,7 +4143,8 @@ init().then(async () => {
     const leaveBalances =
       employee.leaveBalances && typeof employee.leaveBalances === 'object'
         ? { ...employee.leaveBalances }
-        : { ...DEFAULT_LEAVE_BALANCES };
+        : cloneDefaultLeaveBalances();
+    ensureLeaveBalances({ leaveBalances });
 
     const normalizedFrom =
       typeof from === 'string' ? from.trim() : fromDate.toISOString();
@@ -4065,12 +4168,12 @@ init().then(async () => {
     }
 
     const days = getLeaveDays(newApp);
-    const balance = Number(leaveBalances[normalizedType]) || 0;
+    const balance = getLeaveBalanceValue(leaveBalances, normalizedType);
     if (balance < days) {
       return { status: 400, error: 'Insufficient leave balance.' };
     }
 
-    leaveBalances[normalizedType] = balance - days;
+    setLeaveBalanceValue(leaveBalances, normalizedType, balance - days);
     employee.leaveBalances = leaveBalances;
 
     db.data.applications.push(newApp);
@@ -4326,7 +4429,8 @@ init().then(async () => {
     const leaveBalances =
       employee.leaveBalances && typeof employee.leaveBalances === 'object'
         ? { ...employee.leaveBalances }
-        : { ...DEFAULT_LEAVE_BALANCES };
+        : cloneDefaultLeaveBalances();
+    ensureLeaveBalances({ leaveBalances });
 
     const now = new Date();
     const previousLeaveDays = db.data.applications
@@ -4473,7 +4577,8 @@ init().then(async () => {
     const leaveBalances =
       employee.leaveBalances && typeof employee.leaveBalances === 'object'
         ? { ...employee.leaveBalances }
-        : { ...DEFAULT_LEAVE_BALANCES };
+        : cloneDefaultLeaveBalances();
+    ensureLeaveBalances({ leaveBalances });
 
     res.json({
       employeeId: normalizeEmployeeId(employee.id) || scope.employeeId,
@@ -5272,9 +5377,11 @@ init().then(async () => {
     // Credit back balance when rejecting (whether pending or already approved)
     const empIdx = db.data.employees.findIndex(x => x.id == app.employeeId);
     if (empIdx >= 0) {
-      let days = getLeaveDays(app);
-      db.data.employees[empIdx].leaveBalances[app.type] =
-        Number(db.data.employees[empIdx].leaveBalances[app.type]) + days;
+      const employee = db.data.employees[empIdx];
+      ensureLeaveBalances(employee);
+      const days = getLeaveDays(app);
+      const current = getLeaveBalanceValue(employee.leaveBalances, app.type);
+      setLeaveBalanceValue(employee.leaveBalances, app.type, current + days);
     }
 
     db.data.applications[appIdx].status = 'rejected';
@@ -5324,9 +5431,11 @@ init().then(async () => {
     // Credit back balance when cancelling (whether pending or approved)
     const empIdx = db.data.employees.findIndex(x => x.id == appObjApp.employeeId);
     if (empIdx >= 0) {
-      let days = getLeaveDays(appObjApp);
-      db.data.employees[empIdx].leaveBalances[appObjApp.type] =
-        Number(db.data.employees[empIdx].leaveBalances[appObjApp.type]) + days;
+      const employee = db.data.employees[empIdx];
+      ensureLeaveBalances(employee);
+      const days = getLeaveDays(appObjApp);
+      const current = getLeaveBalanceValue(employee.leaveBalances, appObjApp.type);
+      setLeaveBalanceValue(employee.leaveBalances, appObjApp.type, current + days);
     }
 
     db.data.applications[appIdx].status = 'cancelled';
@@ -5364,9 +5473,11 @@ init().then(async () => {
     if (status === 'rejected') {
       // Credit back leave
       const emp = db.data.employees.find(e => e.id == app.employeeId);
-      if (emp && emp.leaveBalances[app.type] !== undefined) {
-        let days = getLeaveDays(app);
-        emp.leaveBalances[app.type] = (+emp.leaveBalances[app.type] || 0) + days;
+      if (emp) {
+        ensureLeaveBalances(emp);
+        const days = getLeaveDays(app);
+        const current = getLeaveBalanceValue(emp.leaveBalances, app.type);
+        setLeaveBalanceValue(emp.leaveBalances, app.type, current + days);
       }
     }
     app.status = status;
