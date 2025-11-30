@@ -19,6 +19,14 @@ npm run dev
 
 Open http://localhost:3000 to access the HR portal. The built-in credentials and endpoints remain unchanged; the only addition is the background Atenxion sync that fires after a successful login.
 
+## Migrating leave system data
+
+Run the migration script to backfill leave balance metadata for all employees:
+
+```bash
+node scripts/migrateLeaveSystem.js
+```
+
 ## Security note
 
 For demo purposes the Atenxion bearer token is embedded directly in the client-side code. In production you should proxy this request through your backend or use another secure relay so the token is not exposed to end users.
