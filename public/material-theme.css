@@ -1143,6 +1143,45 @@ body {
   color: var(--md-sys-color-subtle);
 }
 
+.balance-negative {
+  color: #b3261e;
+}
+
+.balance-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  background: rgba(15, 23, 42, 0.02);
+  border: 1px dashed rgba(15, 23, 42, 0.12);
+  border-radius: 12px;
+  color: #334155;
+  font-size: 0.95rem;
+}
+
+.balance-note .material-symbols-rounded {
+  font-size: 20px;
+  color: #0f172a;
+}
+
+.balance-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(179, 38, 30, 0.08);
+  border: 1px solid rgba(179, 38, 30, 0.18);
+  color: #b3261e;
+  font-weight: 600;
+}
+
+.balance-warning .material-symbols-rounded {
+  font-size: 22px;
+}
+
 .balance-chips {
   display: flex;
   flex-wrap: wrap;

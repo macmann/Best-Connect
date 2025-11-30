@@ -75,6 +75,75 @@ function getLeaveBalanceValue(leaveBalances = {}, type) {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
+function normalizeLeaveBalanceMap(leaveBalances = {}) {
+  return {
+    annual: getLeaveBalanceValue(leaveBalances, 'annual'),
+    casual: getLeaveBalanceValue(leaveBalances, 'casual'),
+    medical: getLeaveBalanceValue(leaveBalances, 'medical')
+  };
+}
+
+function setBalanceValue(elementId, value) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  el.textContent = value;
+  el.classList.toggle('balance-negative', value < 0);
+}
+
+function getNegativeBalanceTypes(balanceMap = {}) {
+  return Object.entries(balanceMap)
+    .filter(([, val]) => typeof val === 'number' && val < 0)
+    .map(([key]) => key);
+}
+
+function updateBalanceWarning(balanceMap = {}) {
+  const warningEl = document.getElementById('balanceWarning');
+  if (!warningEl) return;
+  const negativeTypes = getNegativeBalanceTypes(balanceMap);
+  if (!negativeTypes.length) {
+    warningEl.classList.add('hidden');
+    return;
+  }
+  const warningText = warningEl.querySelector('p');
+  if (warningText) {
+    const readableTypes = negativeTypes.map(capitalize).join(', ');
+    warningText.textContent = `Negative balance for ${readableTypes}. Applications for these types are temporarily disabled.`;
+  }
+  warningEl.classList.remove('hidden');
+}
+
+function populateLeaveTypeOptions(selectEl, balanceMap = {}) {
+  if (!selectEl) return { hasEnabled: false };
+  selectEl.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = '-- select leave type --';
+  placeholder.disabled = true;
+  placeholder.selected = true;
+  selectEl.appendChild(placeholder);
+  const types = ['annual', 'casual', 'medical'];
+  let firstEnabled = '';
+  types.forEach(type => {
+    const balance = balanceMap[type] ?? 0;
+    const isDisabled = balance < 0;
+    const opt = document.createElement('option');
+    opt.value = type;
+    opt.disabled = isDisabled;
+    opt.dataset.balance = balance;
+    opt.textContent = `${capitalize(type)} (${balance} days${isDisabled ? ' - unavailable' : ''})`;
+    if (!isDisabled && !firstEnabled) firstEnabled = type;
+    selectEl.appendChild(opt);
+  });
+  const hasEnabled = Boolean(firstEnabled);
+  if (hasEnabled) {
+    selectEl.value = firstEnabled;
+  } else {
+    placeholder.disabled = false;
+    selectEl.value = '';
+  }
+  return { hasEnabled };
+}
+
 function buildLeaveBalanceEntry(balance, type) {
   const defaults = DEFAULT_LEAVE_BALANCE_CONFIG[type] || { yearlyAllocation: 0, monthlyAccrual: 0 };
   const numericBalance = Number(balance);
@@ -1645,12 +1714,10 @@ function renderMyProfile() {
   setProfileSummaryField('profileSummaryManager', summary.manager);
   setProfileSummaryField('profileSummaryStatus', summary.status);
 
-  const annualEl = document.getElementById('profileBalAnnual');
-  if (annualEl) annualEl.textContent = getLeaveBalanceValue(leaveBalances, 'annual');
-  const casualEl = document.getElementById('profileBalCasual');
-  if (casualEl) casualEl.textContent = getLeaveBalanceValue(leaveBalances, 'casual');
-  const medicalEl = document.getElementById('profileBalMedical');
-  if (medicalEl) medicalEl.textContent = getLeaveBalanceValue(leaveBalances, 'medical');
+  const normalizedBalances = normalizeLeaveBalanceMap(leaveBalances);
+  setBalanceValue('profileBalAnnual', normalizedBalances.annual);
+  setBalanceValue('profileBalCasual', normalizedBalances.casual);
+  setBalanceValue('profileBalMedical', normalizedBalances.medical);
 
   const container = document.getElementById('profileSections');
   if (container) {
@@ -4722,6 +4789,7 @@ let pendingApply = null;
 let editId = null;
 let drawerEditId = null;
 let empModalKeydownHandler = null;
+let currentLeaveBalances = {};
 
 async function init() {
   document.getElementById('employeeSelect').addEventListener('change', onEmployeeChange);
@@ -5102,9 +5170,21 @@ async function onEmployeeChange() {
   const balCasual = document.getElementById('balCasual');
   const balMedical = document.getElementById('balMedical');
   const typeSel = document.getElementById('type');
+  const applyBtn = document.querySelector('#applyForm button[type="submit"]');
   if (!empId) {
-    balAnnual.textContent = balCasual.textContent = balMedical.textContent = '-';
-    typeSel.innerHTML = '<option value="">-- select leave type --</option>';
+    [balAnnual, balCasual, balMedical].forEach(el => {
+      if (el) {
+        el.textContent = '-';
+        el.classList.remove('balance-negative');
+      }
+    });
+    currentLeaveBalances = {};
+    populateLeaveTypeOptions(typeSel, currentLeaveBalances);
+    updateBalanceWarning(currentLeaveBalances);
+    if (applyBtn) {
+      applyBtn.disabled = true;
+      applyBtn.title = 'Select an employee to apply for leave.';
+    }
     document.getElementById('prevLeaves').innerHTML = '';
     return;
   }
@@ -5117,20 +5197,19 @@ async function onEmployeeChange() {
   if (!emp) return;
 
   // === NEW: Show current leave balances (no deduction here, backend handles it) ===
-  const annualBalance = getLeaveBalanceValue(emp.leaveBalances, 'annual');
-  const casualBalance = getLeaveBalanceValue(emp.leaveBalances, 'casual');
-  const medicalBalance = getLeaveBalanceValue(emp.leaveBalances, 'medical');
+  currentLeaveBalances = normalizeLeaveBalanceMap(emp.leaveBalances);
 
-  balAnnual.textContent = annualBalance;
-  balCasual.textContent = casualBalance;
-  balMedical.textContent = medicalBalance;
+  setBalanceValue('balAnnual', currentLeaveBalances.annual);
+  setBalanceValue('balCasual', currentLeaveBalances.casual);
+  setBalanceValue('balMedical', currentLeaveBalances.medical);
 
-  // Set leave type options
-  typeSel.innerHTML = `
-    <option value="annual">Annual (${annualBalance} days)</option>
-    <option value="casual">Casual (${casualBalance} days)</option>
-    <option value="medical">Medical (${medicalBalance} days)</option>
-  `;
+  // Set leave type options and warning
+  const { hasEnabled } = populateLeaveTypeOptions(typeSel, currentLeaveBalances);
+  updateBalanceWarning(currentLeaveBalances);
+  if (applyBtn) {
+    applyBtn.disabled = !hasEnabled;
+    applyBtn.title = hasEnabled ? '' : 'Applications are disabled until balances are non-negative.';
+  }
 
   // Show previous leaves
   renderPreviousLeaves(apps, emp);
@@ -5147,6 +5226,10 @@ function onApplySubmit(ev) {
   const halfDayPeriod = halfDay ? document.getElementById('halfDayPeriod').value : null;
   if (!empId || !type || !from || !to) {
     showToast('Please fill in all required leave details before continuing.', 'warning');
+    return;
+  }
+  if (currentLeaveBalances[type] < 0) {
+    showToast('This leave type is disabled because the balance is negative.', 'warning');
     return;
   }
   pendingApply = { employeeId: +empId, type, from, to, halfDay, halfDayPeriod };

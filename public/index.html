@@ -1342,6 +1342,10 @@
               <span class="material-symbols-rounded">account_balance_wallet</span>
               Leave Balances
             </div>
+            <div class="balance-note" title="Monthly accruals are applied automatically; negative balances pause new applications until the next refresh.">
+              <span class="material-symbols-rounded">info</span>
+              <p>Balances refresh automatically with monthly accruals. Negative balances pause new applications until they recover.</p>
+            </div>
             <div id="balanceDisplay" class="metric-grid">
               <div class="metric-card metric-annual">
                 <div class="metric-icon">
@@ -1370,6 +1374,10 @@
                   <p class="metric-value"><span id="balMedical">-</span><span class="metric-unit">days</span></p>
                 </div>
               </div>
+            </div>
+            <div id="balanceWarning" class="balance-warning hidden">
+              <span class="material-symbols-rounded">warning</span>
+              <p>One or more balances are negative. Please address overdue leaves or wait for monthly accruals before applying.</p>
             </div>
           </div>
         </div>
