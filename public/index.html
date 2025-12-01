@@ -1059,6 +1059,170 @@
       color: #6b7280;
       font-size: 14px;
     }
+
+    /* Performance review experience */
+    .performance-summary {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .md-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: #eef2ff;
+      color: #312e81;
+      font-weight: 700;
+      font-size: 13px;
+      border: 1px solid #e0e7ff;
+    }
+
+    .performance-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      margin-bottom: 16px;
+    }
+
+    .performance-card {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .performance-form .form-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .performance-form .two-col {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+    }
+
+    .performance-form .form-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .performance-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .performance-item {
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 12px;
+      background: #f8fafc;
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .performance-item__body {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .performance-item__meta {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: #475569;
+    }
+
+    .performance-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      background: #eef2ff;
+      color: #312e81;
+      font-weight: 700;
+      font-size: 12px;
+    }
+
+    .performance-chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .performance-chip {
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 6px 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 600;
+      color: #0f172a;
+    }
+
+    .score-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .score-value {
+      font-size: 24px;
+      font-weight: 800;
+      color: #111827;
+      margin: 0;
+    }
+
+    .calibration-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .distribution {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .distribution-bar {
+      background: #e5e7eb;
+      border-radius: 999px;
+      overflow: hidden;
+      height: 12px;
+      position: relative;
+    }
+
+    .distribution-bar span {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      background: linear-gradient(90deg, #4f46e5, #22c55e);
+    }
+
+    .performance-helper {
+      font-size: 12px;
+      color: #475569;
+    }
   </style>
 </head>
 <body class="app-shell">
@@ -1326,15 +1490,244 @@
             <span class="material-symbols-rounded">workspace_premium</span>
             Performance Review
           </h2>
-          <p class="panel-subtitle">Performance Review is currently a WIP experience.</p>
+          <p class="panel-subtitle">Plan, monitor, calibrate, and grow through a full annual performance cycle.</p>
         </div>
 
-        <div class="md-card">
-          <div class="card-title">
-            <span class="material-symbols-rounded">construction</span>
-            Under construction
+        <div class="performance-summary">
+          <div class="md-chip" id="performanceRoleChip">
+            <span class="material-symbols-rounded">verified</span>
+            <span>Role: Employee</span>
           </div>
-          <p class="text-muted">Thanks for checking in! The Performance Review tab is a WIP. Check back soon for updates.</p>
+          <div class="md-chip" id="performanceCycleChip">
+            <span class="material-symbols-rounded">calendar_month</span>
+            <span>Cycle: -</span>
+          </div>
+          <div class="md-chip" id="performanceUpdatedChip">
+            <span class="material-symbols-rounded">update</span>
+            <span>Updated: -</span>
+          </div>
+        </div>
+
+        <div class="performance-grid">
+          <div class="md-card performance-card">
+            <div class="card-title">
+              <span class="material-symbols-rounded">flag</span>
+              Goals &amp; OKRs
+            </div>
+            <p class="card-subtitle">Create weighted goals, submit for manager approval, and track alignment.</p>
+            <div class="md-field">
+              <label class="md-label" for="performanceEmployeeSelect">Employee</label>
+              <div class="md-input-wrapper">
+                <span class="material-symbols-rounded">person</span>
+                <select id="performanceEmployeeSelect" class="md-select"></select>
+              </div>
+            </div>
+            <form id="performanceGoalForm" class="performance-form">
+              <div class="form-row">
+                <label class="md-label" for="goalTitle">Goal / OKR</label>
+                <input id="goalTitle" type="text" class="md-input" placeholder="Ship onboarding revamp" required />
+              </div>
+              <div class="form-row two-col">
+                <div>
+                  <label class="md-label" for="goalWeight">Weight (%)</label>
+                  <input id="goalWeight" type="number" min="1" max="100" class="md-input" placeholder="30" />
+                </div>
+                <div>
+                  <label class="md-label" for="goalDue">Target Date</label>
+                  <input id="goalDue" type="date" class="md-input" />
+                </div>
+              </div>
+              <div class="form-row">
+                <label class="md-label" for="goalDescription">Success Criteria</label>
+                <textarea id="goalDescription" class="md-textarea" rows="2" placeholder="Launch to 100% of customers with CSAT &gt; 4.5"></textarea>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="md-button">
+                  <span class="material-symbols-rounded">add_task</span>
+                  Save goal
+                </button>
+                <span class="helper-text">Goals remain editable until approved by a manager.</span>
+              </div>
+            </form>
+            <div id="performanceGoalList" class="performance-list"></div>
+          </div>
+
+          <div class="md-card performance-card">
+            <div class="card-title">
+              <span class="material-symbols-rounded">chat</span>
+              Recurring Check-ins
+            </div>
+            <p class="card-subtitle">Capture progress, nudge reminders, and flag escalations early.</p>
+            <form id="checkInForm" class="performance-form">
+              <div class="form-row">
+                <label class="md-label" for="checkInNotes">Update</label>
+                <textarea id="checkInNotes" class="md-textarea" rows="2" placeholder="Progress, blockers, and asks" required></textarea>
+              </div>
+              <div class="form-row two-col">
+                <div>
+                  <label class="md-label" for="checkInType">Check-in Type</label>
+                  <select id="checkInType" class="md-select">
+                    <option value="status">Status</option>
+                    <option value="reminder">Reminder</option>
+                    <option value="escalation">Escalation</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="md-label" for="checkInDate">Next touchpoint</label>
+                  <input id="checkInDate" type="date" class="md-input" />
+                </div>
+              </div>
+              <label class="md-checkbox">
+                <input type="checkbox" id="checkInEscalate" />
+                <span>Notify manager and HR for escalations</span>
+              </label>
+              <div class="form-actions">
+                <button type="submit" class="md-button">
+                  <span class="material-symbols-rounded">event_available</span>
+                  Log check-in
+                </button>
+              </div>
+            </form>
+            <div id="checkInList" class="performance-list"></div>
+          </div>
+        </div>
+
+        <div class="performance-grid">
+          <div class="md-card performance-card">
+            <div class="card-title">
+              <span class="material-symbols-rounded">hourglass_top</span>
+              Mid-year Assessment
+            </div>
+            <p class="card-subtitle">Self-reflect with evidence uploads, plus interim manager ratings.</p>
+            <form id="midYearForm" class="performance-form">
+              <div class="form-row">
+                <label class="md-label" for="midYearSelf">Self-assessment</label>
+                <textarea id="midYearSelf" class="md-textarea" rows="3" placeholder="Impact, learnings, and support needed"></textarea>
+              </div>
+              <div class="form-row two-col">
+                <div>
+                  <label class="md-label" for="midYearRating">Interim manager rating</label>
+                  <select id="midYearRating" class="md-select">
+                    <option value="">-- select --</option>
+                    <option value="exceeds">Exceeds expectations</option>
+                    <option value="meets">Meets expectations</option>
+                    <option value="developing">Developing</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="md-label" for="midYearEvidence">Evidence</label>
+                  <input id="midYearEvidence" type="file" class="md-input" multiple />
+                </div>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="md-button">
+                  <span class="material-symbols-rounded">save</span>
+                  Save mid-year package
+                </button>
+              </div>
+            </form>
+            <div id="midYearEvidenceList" class="performance-chips"></div>
+          </div>
+
+          <div class="md-card performance-card">
+            <div class="card-title">
+              <span class="material-symbols-rounded">grade</span>
+              Year-end Reviews
+            </div>
+            <p class="card-subtitle">Capture self/manager reviews, competency ratings, and weighted scoring.</p>
+            <form id="yearEndForm" class="performance-form">
+              <div class="form-row">
+                <label class="md-label" for="yearEndSelf">Self-review</label>
+                <textarea id="yearEndSelf" class="md-textarea" rows="2"></textarea>
+              </div>
+              <div class="form-row">
+                <label class="md-label" for="yearEndManager">Manager notes</label>
+                <textarea id="yearEndManager" class="md-textarea" rows="2" placeholder="Calibration-friendly notes"></textarea>
+              </div>
+              <div id="yearEndGoals" class="performance-list"></div>
+              <div id="yearEndCompetencies" class="performance-list"></div>
+              <div class="score-row">
+                <div>
+                  <p class="label">Weighted Score</p>
+                  <p id="yearEndScore" class="score-value">-</p>
+                </div>
+                <button type="submit" class="md-button">
+                  <span class="material-symbols-rounded">check_circle</span>
+                  Save review &amp; scores
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="performance-grid">
+          <div class="md-card performance-card">
+            <div class="card-title">
+              <span class="material-symbols-rounded">gavel</span>
+              HR Calibration
+            </div>
+            <p class="card-subtitle">Lock or unlock ratings, apply calibration adjustments, and visualize distribution.</p>
+            <div class="calibration-row">
+              <div>
+                <p class="label">Calibration lock</p>
+                <p class="text-muted">Only HR can toggle locks. Managers can view status.</p>
+              </div>
+              <button id="calibrationToggle" class="md-button md-button--outlined" type="button">
+                <span class="material-symbols-rounded">lock_open</span>
+                <span>Unlock</span>
+              </button>
+            </div>
+            <div class="form-row two-col">
+              <div>
+                <label class="md-label" for="calibrationAdjustments">Rating adjustments</label>
+                <textarea id="calibrationAdjustments" class="md-textarea" rows="2" placeholder="Example: Move Goal 1 to 4.2 after calibration"></textarea>
+              </div>
+              <div>
+                <label class="md-label">Distribution</label>
+                <div id="calibrationDistribution" class="distribution"></div>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button id="calibrationSave" type="button" class="md-button">
+                <span class="material-symbols-rounded">stacked_bar_chart</span>
+                Save calibration
+              </button>
+            </div>
+          </div>
+
+          <div class="md-card performance-card">
+            <div class="card-title">
+              <span class="material-symbols-rounded">trending_up</span>
+              Development Plan
+            </div>
+            <p class="card-subtitle">Capture growth actions, training recommendations, and follow-up tasks.</p>
+            <form id="developmentForm" class="performance-form">
+              <div class="form-row">
+                <label class="md-label" for="developmentSummary">Plan summary</label>
+                <textarea id="developmentSummary" class="md-textarea" rows="2" placeholder="Growth focus areas, timelines, and support"></textarea>
+              </div>
+              <div class="form-row two-col">
+                <div>
+                  <label class="md-label" for="trainingInput">Training recommendations</label>
+                  <input id="trainingInput" type="text" class="md-input" placeholder="e.g., Leadership Foundations" />
+                  <button id="addTraining" type="button" class="md-button md-button--outlined">Add training</button>
+                  <div id="trainingList" class="performance-chips"></div>
+                </div>
+                <div>
+                  <label class="md-label" for="followUpInput">Follow-up tasks</label>
+                  <input id="followUpInput" type="text" class="md-input" placeholder="e.g., Shadow QBR with manager" />
+                  <button id="addFollowUp" type="button" class="md-button md-button--outlined">Add task</button>
+                  <div id="followUpList" class="performance-chips"></div>
+                </div>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="md-button">
+                  <span class="material-symbols-rounded">task_alt</span>
+                  Save development plan
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       </section>
 

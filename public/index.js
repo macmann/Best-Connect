@@ -933,6 +933,7 @@ function showPanel(name) {
   if (name === 'performance' && performancePanel) {
     performancePanel.classList.remove('hidden');
     if (performanceBtn) performanceBtn.classList.add('active-tab');
+    ensurePerformanceExperience();
   }
   if (name === 'manage') {
     managePanel.classList.remove('hidden');
@@ -1018,6 +1019,615 @@ function toggleTabsByRole() {
   }
 
   refreshTabGroupVisibility();
+}
+
+// ----------- PERFORMANCE REVIEW -----------
+const PERFORMANCE_COMPETENCIES = [
+  { key: 'execution', label: 'Execution & Delivery' },
+  { key: 'craft', label: 'Craft & Quality' },
+  { key: 'collaboration', label: 'Collaboration' },
+  { key: 'leadership', label: 'Leadership & Growth' }
+];
+
+let performanceState = null;
+let performanceEmployeeId = '';
+let performanceInitialized = false;
+let performanceEditingGoalId = null;
+
+function getPerformanceRole() {
+  if (isSuperAdmin(currentUser)) return 'hr';
+  if (isManagerRole(currentUser)) return 'manager';
+  return 'employee';
+}
+
+function updatePerformanceSummary() {
+  const roleChip = document.getElementById('performanceRoleChip');
+  const cycleChip = document.getElementById('performanceCycleChip');
+  const updatedChip = document.getElementById('performanceUpdatedChip');
+  const role = getPerformanceRole();
+  const roleLabel = role === 'hr' ? 'HR' : role === 'manager' ? 'Manager' : 'Employee';
+  if (roleChip) {
+    roleChip.querySelector('span:nth-child(2)').textContent = `Role: ${roleLabel}`;
+  }
+  if (cycleChip && performanceState?.cycleYear) {
+    cycleChip.querySelector('span:nth-child(2)').textContent = `Cycle: ${performanceState.cycleYear}`;
+  }
+  if (updatedChip) {
+    const ts = performanceState?.updatedAt ? new Date(performanceState.updatedAt) : null;
+    updatedChip.querySelector('span:nth-child(2)').textContent = ts
+      ? `Updated: ${ts.toLocaleString()}`
+      : 'Updated: -';
+  }
+}
+
+function normalizePerformanceState(data = {}) {
+  return {
+    employeeId: data.employeeId || performanceEmployeeId,
+    cycleYear: data.cycleYear || new Date().getFullYear(),
+    goals: Array.isArray(data.goals) ? data.goals : [],
+    checkIns: Array.isArray(data.checkIns) ? data.checkIns : [],
+    midYear: data.midYear || { selfAssessment: '', interimManagerRating: '', evidence: [] },
+    yearEnd: data.yearEnd || {
+      selfReview: '',
+      managerReview: '',
+      goalScores: [],
+      competencyScores: [],
+      overallScore: null
+    },
+    calibration: data.calibration || {
+      locked: false,
+      adjustments: [],
+      distribution: { exceeds: 0, meets: 0, developing: 0 }
+    },
+    development: data.development || { planSummary: '', trainings: [], followUps: [] },
+    approvals: Array.isArray(data.approvals) ? data.approvals : [],
+    reminders: Array.isArray(data.reminders) ? data.reminders : [],
+    updatedAt: data.updatedAt || new Date().toISOString()
+  };
+}
+
+async function persistPerformance() {
+  if (!performanceEmployeeId || !performanceState) return;
+  const res = await apiFetch(`/api/performance/${performanceEmployeeId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(performanceState)
+  });
+  if (!res.ok) {
+    alert('Could not save performance data.');
+    return;
+  }
+  const data = await res.json();
+  performanceState = normalizePerformanceState(data.review || performanceState);
+  updatePerformanceSummary();
+  renderPerformanceExperience();
+}
+
+function renderGoals() {
+  const container = document.getElementById('performanceGoalList');
+  if (!container) return;
+  container.innerHTML = '';
+  const role = getPerformanceRole();
+  const goals = Array.isArray(performanceState?.goals) ? performanceState.goals : [];
+  if (!goals.length) {
+    container.innerHTML = '<p class="text-muted">Add a goal with weight to kick off the cycle.</p>';
+    return;
+  }
+  goals.forEach(goal => {
+    const item = document.createElement('div');
+    item.className = 'performance-item';
+    item.innerHTML = `
+      <div class="performance-item__body">
+        <strong>${escapeHtml(goal.title || 'Goal')}</strong>
+        <div class="performance-item__meta">
+          <span class="performance-badge">Weight ${goal.weight || 0}%</span>
+          ${goal.due ? `<span class="performance-badge">Due ${goal.due}</span>` : ''}
+          <span class="performance-badge">${goal.status === 'approved' ? 'Manager approved' : 'Awaiting approval'}</span>
+        </div>
+        ${goal.description ? `<p class="text-muted">${escapeHtml(goal.description)}</p>` : ''}
+      </div>
+      <div class="performance-item__actions">
+        ${role !== 'employee' && goal.status !== 'approved' ? `<button class="md-button md-button--filled" data-goal-action="approve" data-goal-id="${goal.id}">Approve</button>` : ''}
+        ${goal.status === 'approved' && role !== 'employee' ? `<button class="md-button md-button--outlined" data-goal-action="reopen" data-goal-id="${goal.id}">Re-open</button>` : ''}
+        ${goal.status !== 'approved' ? `<button class="md-button md-button--text" data-goal-action="edit" data-goal-id="${goal.id}">Edit</button>` : ''}
+      </div>
+    `;
+    container.appendChild(item);
+  });
+}
+
+function renderCheckIns() {
+  const container = document.getElementById('checkInList');
+  if (!container) return;
+  container.innerHTML = '';
+  const checkIns = Array.isArray(performanceState?.checkIns) ? performanceState.checkIns : [];
+  if (!checkIns.length) {
+    container.innerHTML = '<p class="text-muted">Log check-ins to create reminders and escalations.</p>';
+    return;
+  }
+  checkIns
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+    .forEach(entry => {
+      const item = document.createElement('div');
+      item.className = 'performance-item';
+      item.innerHTML = `
+        <div class="performance-item__body">
+          <strong>${escapeHtml(entry.type || 'Status')}</strong>
+          <p class="text-muted">${escapeHtml(entry.notes || '')}</p>
+          <div class="performance-item__meta">
+            ${entry.nextCheckIn ? `<span class="performance-badge">Next: ${entry.nextCheckIn}</span>` : ''}
+            ${entry.escalate ? '<span class="performance-badge">Escalation</span>' : ''}
+          </div>
+        </div>
+      `;
+      container.appendChild(item);
+    });
+}
+
+function renderMidYear() {
+  const selfInput = document.getElementById('midYearSelf');
+  const ratingSelect = document.getElementById('midYearRating');
+  const evidenceList = document.getElementById('midYearEvidenceList');
+  if (!performanceState?.midYear) return;
+  if (selfInput) selfInput.value = performanceState.midYear.selfAssessment || '';
+  if (ratingSelect) ratingSelect.value = performanceState.midYear.interimManagerRating || '';
+  if (evidenceList) {
+    evidenceList.innerHTML = '';
+    const evidence = Array.isArray(performanceState.midYear.evidence)
+      ? performanceState.midYear.evidence
+      : [];
+    if (!evidence.length) {
+      evidenceList.innerHTML = '<p class="text-muted">Upload links or proof points to support your self-assessment.</p>';
+    } else {
+      evidence.forEach(ev => {
+        const chip = document.createElement('span');
+        chip.className = 'performance-chip';
+        chip.textContent = ev.name || 'Attachment';
+        evidenceList.appendChild(chip);
+      });
+    }
+  }
+}
+
+function ensureGoalScores() {
+  const goals = Array.isArray(performanceState?.goals) ? performanceState.goals : [];
+  if (!performanceState.yearEnd) {
+    performanceState.yearEnd = { selfReview: '', managerReview: '', goalScores: [], competencyScores: [], overallScore: null };
+  }
+  const goalScores = Array.isArray(performanceState.yearEnd.goalScores)
+    ? performanceState.yearEnd.goalScores
+    : [];
+  goals.forEach(goal => {
+    if (!goalScores.find(gs => gs.goalId === goal.id)) {
+      goalScores.push({ goalId: goal.id, rating: 3 });
+    }
+  });
+  performanceState.yearEnd.goalScores = goalScores;
+
+  const competencyScores = Array.isArray(performanceState.yearEnd.competencyScores)
+    ? performanceState.yearEnd.competencyScores
+    : [];
+  PERFORMANCE_COMPETENCIES.forEach(comp => {
+    if (!competencyScores.find(c => c.key === comp.key)) {
+      competencyScores.push({ key: comp.key, rating: 3 });
+    }
+  });
+  performanceState.yearEnd.competencyScores = competencyScores;
+}
+
+function computeWeightedScore() {
+  const goals = Array.isArray(performanceState?.goals) ? performanceState.goals : [];
+  const scores = Array.isArray(performanceState?.yearEnd?.goalScores)
+    ? performanceState.yearEnd.goalScores
+    : [];
+  if (!goals.length || !scores.length) return null;
+  const totalWeight = goals.reduce((sum, g) => sum + Number(g.weight || 0), 0) || goals.length;
+  let scoreSum = 0;
+  goals.forEach(goal => {
+    const entry = scores.find(s => s.goalId === goal.id);
+    const rating = entry ? Number(entry.rating || 0) : 0;
+    const weight = Number(goal.weight || 0) || 1;
+    scoreSum += (weight / totalWeight) * rating;
+  });
+  const overall = Number((scoreSum || 0).toFixed(2));
+  performanceState.yearEnd.overallScore = overall;
+  return overall;
+}
+
+function renderYearEnd() {
+  ensureGoalScores();
+  const selfInput = document.getElementById('yearEndSelf');
+  const managerInput = document.getElementById('yearEndManager');
+  const goalsContainer = document.getElementById('yearEndGoals');
+  const compContainer = document.getElementById('yearEndCompetencies');
+  const scoreEl = document.getElementById('yearEndScore');
+  if (selfInput) selfInput.value = performanceState?.yearEnd?.selfReview || '';
+  if (managerInput) managerInput.value = performanceState?.yearEnd?.managerReview || '';
+
+  if (goalsContainer) {
+    goalsContainer.innerHTML = '';
+    const goals = Array.isArray(performanceState?.goals) ? performanceState.goals : [];
+    if (!goals.length) {
+      goalsContainer.innerHTML = '<p class="text-muted">Add goals to capture weighted scoring.</p>';
+    } else {
+      goals.forEach(goal => {
+        const scoreEntry = performanceState.yearEnd.goalScores.find(gs => gs.goalId === goal.id) || { rating: 3 };
+        const wrapper = document.createElement('div');
+        wrapper.className = 'performance-item';
+        wrapper.innerHTML = `
+          <div class="performance-item__body">
+            <strong>${escapeHtml(goal.title || 'Goal')}</strong>
+            <p class="performance-helper">Weight ${goal.weight || 0}%</p>
+          </div>
+          <div>
+            <label class="performance-helper" for="goalScore-${goal.id}">Rating</label>
+            <input type="range" min="1" max="5" step="1" id="goalScore-${goal.id}" data-goal-score="${goal.id}" value="${scoreEntry.rating}" />
+          </div>
+        `;
+        goalsContainer.appendChild(wrapper);
+      });
+    }
+  }
+
+  if (compContainer) {
+    compContainer.innerHTML = '';
+    PERFORMANCE_COMPETENCIES.forEach(comp => {
+      const entry = performanceState.yearEnd.competencyScores.find(c => c.key === comp.key) || { rating: 3 };
+      const row = document.createElement('div');
+      row.className = 'performance-item';
+      row.innerHTML = `
+        <div class="performance-item__body">
+          <strong>${comp.label}</strong>
+          <p class="performance-helper">Rate 1-5</p>
+        </div>
+        <div>
+          <input type="range" min="1" max="5" step="1" data-competency-score="${comp.key}" value="${entry.rating}" />
+        </div>
+      `;
+      compContainer.appendChild(row);
+    });
+  }
+
+  const score = computeWeightedScore();
+  if (scoreEl) scoreEl.textContent = score != null ? score : '-';
+}
+
+function renderCalibration() {
+  const toggle = document.getElementById('calibrationToggle');
+  const adjustments = document.getElementById('calibrationAdjustments');
+  const distribution = document.getElementById('calibrationDistribution');
+  const role = getPerformanceRole();
+  if (toggle) {
+    toggle.disabled = role !== 'hr';
+    const locked = Boolean(performanceState?.calibration?.locked);
+    toggle.querySelector('span:nth-child(1)').textContent = locked ? 'lock' : 'lock_open';
+    toggle.querySelector('span:nth-child(2)').textContent = locked ? 'Locked' : 'Unlock';
+  }
+  if (adjustments) {
+    const notes = Array.isArray(performanceState?.calibration?.adjustments)
+      ? performanceState.calibration.adjustments.join('\n')
+      : performanceState?.calibration?.adjustments || '';
+    adjustments.value = notes;
+    adjustments.disabled = Boolean(performanceState?.calibration?.locked) && role !== 'hr';
+  }
+  if (distribution) {
+    distribution.innerHTML = '';
+    const dist = performanceState?.calibration?.distribution || { exceeds: 0, meets: 0, developing: 0 };
+    ['exceeds', 'meets', 'developing'].forEach(key => {
+      const value = Number(dist[key] || 0);
+      const row = document.createElement('div');
+      row.innerHTML = `
+        <p class="performance-helper" style="margin:0 0 4px; text-transform: capitalize;">${key} (${value})</p>
+        <div class="distribution-bar"><span style="width:${Math.min(value, 100)}%;"></span></div>
+      `;
+      distribution.appendChild(row);
+    });
+  }
+}
+
+function renderDevelopment() {
+  const summaryInput = document.getElementById('developmentSummary');
+  const trainingList = document.getElementById('trainingList');
+  const followUpList = document.getElementById('followUpList');
+  if (summaryInput) summaryInput.value = performanceState?.development?.planSummary || '';
+  if (trainingList) {
+    trainingList.innerHTML = '';
+    (performanceState?.development?.trainings || []).forEach((item, idx) => {
+      const chip = document.createElement('span');
+      chip.className = 'performance-chip';
+      chip.innerHTML = `${escapeHtml(item)} <button type="button" data-training-remove="${idx}" class="md-button md-button--text md-button--small">Remove</button>`;
+      trainingList.appendChild(chip);
+    });
+  }
+  if (followUpList) {
+    followUpList.innerHTML = '';
+    (performanceState?.development?.followUps || []).forEach((item, idx) => {
+      const chip = document.createElement('span');
+      chip.className = 'performance-chip';
+      chip.innerHTML = `${escapeHtml(item)} <button type="button" data-followup-remove="${idx}" class="md-button md-button--text md-button--small">Remove</button>`;
+      followUpList.appendChild(chip);
+    });
+  }
+}
+
+function renderPerformanceExperience() {
+  renderGoals();
+  renderCheckIns();
+  renderMidYear();
+  renderYearEnd();
+  renderCalibration();
+  renderDevelopment();
+  updatePerformanceSummary();
+}
+
+async function loadPerformanceReview(empId) {
+  if (!empId) return;
+  performanceEmployeeId = empId;
+  const res = await apiFetch(`/api/performance/${empId}`);
+  if (!res.ok) {
+    alert('Unable to load performance review.');
+    return;
+  }
+  const data = await res.json();
+  performanceState = normalizePerformanceState(data.review || {});
+  renderPerformanceExperience();
+}
+
+async function loadPerformanceEmployees() {
+  const select = document.getElementById('performanceEmployeeSelect');
+  if (!select) return;
+  const emps = await getJSON('/employees');
+  const role = getPerformanceRole();
+  let options = emps;
+  if (role === 'employee') {
+    options = emps.filter(e => e.id == currentUser?.employeeId);
+  }
+  select.innerHTML = '<option value="">-- select --</option>';
+  options.forEach(e => select.add(new Option(e.name || `Employee ${e.id}`, e.id)));
+  if (!performanceEmployeeId && options.length === 1) {
+    performanceEmployeeId = options[0].id;
+    select.value = performanceEmployeeId;
+  }
+  if (select.value && select.value !== performanceEmployeeId) {
+    performanceEmployeeId = select.value;
+  }
+  select.onchange = ev => {
+    performanceEmployeeId = ev.target.value;
+    if (performanceEmployeeId) loadPerformanceReview(performanceEmployeeId);
+  };
+  if (performanceEmployeeId) {
+    await loadPerformanceReview(performanceEmployeeId);
+  }
+}
+
+async function onGoalSubmit(ev) {
+  ev.preventDefault();
+  const title = document.getElementById('goalTitle').value.trim();
+  const weight = Number(document.getElementById('goalWeight').value || 0);
+  const due = document.getElementById('goalDue').value;
+  const description = document.getElementById('goalDescription').value.trim();
+  if (!title) return;
+  const now = Date.now();
+  const goal = {
+    id: performanceEditingGoalId || now,
+    title,
+    weight: weight || 0,
+    due,
+    description,
+    status: 'pending',
+    createdAt: new Date(now).toISOString()
+  };
+  const goals = Array.isArray(performanceState?.goals) ? [...performanceState.goals] : [];
+  const idx = goals.findIndex(g => g.id === goal.id);
+  if (idx >= 0) goals[idx] = goal; else goals.push(goal);
+  performanceState.goals = goals;
+  performanceEditingGoalId = null;
+  document.getElementById('performanceGoalForm').reset();
+  renderGoals();
+  await persistPerformance();
+}
+
+function onGoalListClick(ev) {
+  const btn = ev.target.closest('[data-goal-action]');
+  if (!btn) return;
+  const goalId = btn.getAttribute('data-goal-id');
+  const action = btn.getAttribute('data-goal-action');
+  const goals = Array.isArray(performanceState?.goals) ? performanceState.goals : [];
+  const goal = goals.find(g => String(g.id) === String(goalId));
+  if (!goal) return;
+  if (action === 'approve' && getPerformanceRole() !== 'employee') {
+    goal.status = 'approved';
+    goal.approvedAt = new Date().toISOString();
+  } else if (action === 'reopen' && getPerformanceRole() !== 'employee') {
+    goal.status = 'pending';
+  } else if (action === 'edit') {
+    performanceEditingGoalId = goal.id;
+    document.getElementById('goalTitle').value = goal.title || '';
+    document.getElementById('goalWeight').value = goal.weight || '';
+    document.getElementById('goalDue').value = goal.due || '';
+    document.getElementById('goalDescription').value = goal.description || '';
+  }
+  renderGoals();
+  persistPerformance();
+}
+
+async function onCheckInSubmit(ev) {
+  ev.preventDefault();
+  const notes = document.getElementById('checkInNotes').value.trim();
+  if (!notes) return;
+  const type = document.getElementById('checkInType').value || 'status';
+  const nextCheckIn = document.getElementById('checkInDate').value || '';
+  const escalate = document.getElementById('checkInEscalate').checked;
+  const entry = {
+    id: Date.now(),
+    notes,
+    type,
+    nextCheckIn,
+    escalate,
+    createdAt: new Date().toISOString()
+  };
+  const checkIns = Array.isArray(performanceState?.checkIns) ? performanceState.checkIns : [];
+  performanceState.checkIns = [entry, ...checkIns];
+  document.getElementById('checkInForm').reset();
+  renderCheckIns();
+  await persistPerformance();
+}
+
+async function onMidYearSubmit(ev) {
+  ev.preventDefault();
+  const selfAssessment = document.getElementById('midYearSelf').value;
+  const interimManagerRating = document.getElementById('midYearRating').value;
+  const files = Array.from(document.getElementById('midYearEvidence').files || []);
+  const uploads = await Promise.all(files.map(async file => ({
+    id: Date.now() + file.size,
+    name: file.name,
+    content: await fileToBase64(file)
+  })));
+  const evidence = Array.isArray(performanceState?.midYear?.evidence)
+    ? [...performanceState.midYear.evidence, ...uploads]
+    : uploads;
+  performanceState.midYear = { selfAssessment, interimManagerRating, evidence };
+  renderMidYear();
+  await persistPerformance();
+}
+
+function onYearEndChange(ev) {
+  const goalScore = ev.target.getAttribute('data-goal-score');
+  const compScore = ev.target.getAttribute('data-competency-score');
+  if (goalScore) {
+    const entry = performanceState.yearEnd.goalScores.find(gs => gs.goalId == goalScore);
+    if (entry) entry.rating = Number(ev.target.value || 0);
+  }
+  if (compScore) {
+    const entry = performanceState.yearEnd.competencyScores.find(c => c.key === compScore);
+    if (entry) entry.rating = Number(ev.target.value || 0);
+  }
+  renderYearEnd();
+}
+
+async function onYearEndSubmit(ev) {
+  ev.preventDefault();
+  const selfReview = document.getElementById('yearEndSelf').value;
+  const managerReview = document.getElementById('yearEndManager').value;
+  performanceState.yearEnd = {
+    ...performanceState.yearEnd,
+    selfReview,
+    managerReview
+  };
+  computeWeightedScore();
+  renderYearEnd();
+  await persistPerformance();
+}
+
+async function onCalibrationSave() {
+  const notes = document.getElementById('calibrationAdjustments').value;
+  const locked = Boolean(performanceState?.calibration?.locked);
+  performanceState.calibration = {
+    ...(performanceState.calibration || {}),
+    adjustments: notes ? notes.split('\n').filter(Boolean) : [],
+    locked
+  };
+  renderCalibration();
+  await persistPerformance();
+}
+
+async function onCalibrationToggle() {
+  if (getPerformanceRole() !== 'hr') return;
+  const locked = !Boolean(performanceState?.calibration?.locked);
+  performanceState.calibration = {
+    ...(performanceState.calibration || {}),
+    locked
+  };
+  renderCalibration();
+  await persistPerformance();
+}
+
+async function onDevelopmentSubmit(ev) {
+  ev.preventDefault();
+  const summary = document.getElementById('developmentSummary').value;
+  performanceState.development = {
+    ...(performanceState.development || {}),
+    planSummary: summary,
+    trainings: performanceState.development?.trainings || [],
+    followUps: performanceState.development?.followUps || []
+  };
+  renderDevelopment();
+  await persistPerformance();
+}
+
+function onTrainingAdd() {
+  const input = document.getElementById('trainingInput');
+  if (!input || !input.value.trim()) return;
+  performanceState.development = performanceState.development || { trainings: [], followUps: [] };
+  performanceState.development.trainings = performanceState.development.trainings || [];
+  performanceState.development.trainings.push(input.value.trim());
+  input.value = '';
+  renderDevelopment();
+  persistPerformance();
+}
+
+function onFollowUpAdd() {
+  const input = document.getElementById('followUpInput');
+  if (!input || !input.value.trim()) return;
+  performanceState.development = performanceState.development || { trainings: [], followUps: [] };
+  performanceState.development.followUps = performanceState.development.followUps || [];
+  performanceState.development.followUps.push(input.value.trim());
+  input.value = '';
+  renderDevelopment();
+  persistPerformance();
+}
+
+function onDevelopmentListClick(ev) {
+  const trainingBtn = ev.target.closest('[data-training-remove]');
+  const followUpBtn = ev.target.closest('[data-followup-remove]');
+  if (trainingBtn) {
+    const idx = Number(trainingBtn.getAttribute('data-training-remove'));
+    performanceState.development.trainings.splice(idx, 1);
+  }
+  if (followUpBtn) {
+    const idx = Number(followUpBtn.getAttribute('data-followup-remove'));
+    performanceState.development.followUps.splice(idx, 1);
+  }
+  renderDevelopment();
+  persistPerformance();
+}
+
+async function ensurePerformanceExperience() {
+  if (performanceInitialized) {
+    if (performanceEmployeeId) await loadPerformanceReview(performanceEmployeeId);
+    return;
+  }
+  performanceInitialized = true;
+  performanceState = performanceState || normalizePerformanceState({});
+  const goalForm = document.getElementById('performanceGoalForm');
+  const checkInForm = document.getElementById('checkInForm');
+  const midYearForm = document.getElementById('midYearForm');
+  const yearEndForm = document.getElementById('yearEndForm');
+  const devForm = document.getElementById('developmentForm');
+  const goalList = document.getElementById('performanceGoalList');
+  const yearEndGoals = document.getElementById('yearEndGoals');
+  const yearEndCompetencies = document.getElementById('yearEndCompetencies');
+  const calibrationButton = document.getElementById('calibrationSave');
+  const calibrationToggle = document.getElementById('calibrationToggle');
+  const trainingButton = document.getElementById('addTraining');
+  const followUpButton = document.getElementById('addFollowUp');
+  const devLists = document.getElementById('developmentForm');
+
+  if (goalForm) goalForm.addEventListener('submit', onGoalSubmit);
+  if (goalList) goalList.addEventListener('click', onGoalListClick);
+  if (checkInForm) checkInForm.addEventListener('submit', onCheckInSubmit);
+  if (midYearForm) midYearForm.addEventListener('submit', onMidYearSubmit);
+  if (yearEndForm) yearEndForm.addEventListener('submit', onYearEndSubmit);
+  if (yearEndGoals) yearEndGoals.addEventListener('input', onYearEndChange);
+  if (yearEndCompetencies) yearEndCompetencies.addEventListener('input', onYearEndChange);
+  if (calibrationButton) calibrationButton.addEventListener('click', onCalibrationSave);
+  if (calibrationToggle) calibrationToggle.addEventListener('click', onCalibrationToggle);
+  if (devForm) devForm.addEventListener('submit', onDevelopmentSubmit);
+  if (trainingButton) trainingButton.addEventListener('click', onTrainingAdd);
+  if (followUpButton) followUpButton.addEventListener('click', onFollowUpAdd);
+  if (devLists) devLists.addEventListener('click', onDevelopmentListClick);
+
+  await loadPerformanceEmployees();
 }
 
 function getCurrentPayrollMonthValue() {
