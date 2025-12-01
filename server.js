@@ -882,9 +882,14 @@ function normalizeLeaveBalanceEntry(entry, defaults) {
     typeof entry === 'object' && entry !== null && 'taken' in entry ? entry.taken : baseDefaults.taken
   );
 
+  const clampToAllocation = value => {
+    if (!Number.isFinite(value)) return value;
+    return Number.isFinite(yearlyAllocation) ? Math.min(value, yearlyAllocation) : value;
+  };
+
   return {
     balance: roundToOneDecimal(
-      Number.isFinite(balanceValue) ? balanceValue : baseDefaults.balance
+      clampToAllocation(Number.isFinite(balanceValue) ? balanceValue : baseDefaults.balance)
     ),
     yearlyAllocation: Number.isFinite(yearlyAllocation)
       ? yearlyAllocation
@@ -892,7 +897,9 @@ function normalizeLeaveBalanceEntry(entry, defaults) {
     monthlyAccrual: Number.isFinite(monthlyAccrual)
       ? monthlyAccrual
       : baseDefaults.monthlyAccrual,
-    accrued: roundToOneDecimal(Number.isFinite(accrued) ? accrued : baseDefaults.accrued),
+    accrued: roundToOneDecimal(
+      clampToAllocation(Number.isFinite(accrued) ? accrued : baseDefaults.accrued)
+    ),
     taken: roundToOneDecimal(Number.isFinite(taken) ? taken : baseDefaults.taken)
   };
 }
