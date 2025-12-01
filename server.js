@@ -157,6 +157,48 @@ function isEmployeeActive(employee) {
   return isActiveEmployeeStatus(employee.status);
 }
 
+function canAccessPerformanceRecord(user, employeeId) {
+  if (!user) return false;
+  if (isSuperAdminRole(user.role)) return true;
+  if (isManagerRole(user.role)) return true;
+  return String(user.employeeId) === String(employeeId);
+}
+
+function buildPerformanceTemplate(employeeId) {
+  return {
+    _id: crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(12).toString('hex'),
+    employeeId: String(employeeId),
+    cycleYear: new Date().getFullYear(),
+    goals: [],
+    checkIns: [],
+    midYear: {
+      selfAssessment: '',
+      interimManagerRating: '',
+      evidence: []
+    },
+    yearEnd: {
+      selfReview: '',
+      managerReview: '',
+      goalScores: [],
+      competencyScores: [],
+      overallScore: null
+    },
+    calibration: {
+      locked: false,
+      adjustments: [],
+      distribution: { exceeds: 0, meets: 0, developing: 0 }
+    },
+    development: {
+      planSummary: '',
+      trainings: [],
+      followUps: []
+    },
+    reminders: [],
+    approvals: [],
+    updatedAt: new Date().toISOString()
+  };
+}
+
 // ---- PAIRING CONFIG ----
 const PAIR_REQUEST_TTL_MIN_SECONDS = Math.max(
   60,
@@ -2492,6 +2534,73 @@ init().then(async () => {
     }
     await db.write();
     res.status(201).json(employee);
+  });
+
+  // ========== PERFORMANCE REVIEWS ==========
+  app.get('/api/performance/:employeeId', authRequired, async (req, res) => {
+    const { employeeId } = req.params;
+    await db.read();
+    if (!canAccessPerformanceRecord(req.user, employeeId)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const records = Array.isArray(db.data.performanceReviews) ? db.data.performanceReviews : [];
+    const review = records.find(r => String(r.employeeId) === String(employeeId));
+    res.json({
+      review: review || buildPerformanceTemplate(employeeId),
+      role: normalizeRole(req.user.role)
+    });
+  });
+
+  app.put('/api/performance/:employeeId', authRequired, async (req, res) => {
+    const { employeeId } = req.params;
+    await db.read();
+    if (!canAccessPerformanceRecord(req.user, employeeId)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const payload = req.body && typeof req.body === 'object' ? req.body : {};
+    const records = Array.isArray(db.data.performanceReviews)
+      ? db.data.performanceReviews
+      : (db.data.performanceReviews = []);
+
+    let review = records.find(r => String(r.employeeId) === String(employeeId));
+    if (!review) {
+      review = buildPerformanceTemplate(employeeId);
+      records.push(review);
+    }
+
+    const mergedCalibration = {
+      ...(review.calibration || {}),
+      ...(payload.calibration || {})
+    };
+    if (!isSuperAdminRole(req.user.role)) {
+      mergedCalibration.locked = Boolean(review.calibration?.locked);
+    }
+
+    const updatedReview = {
+      ...review,
+      ...payload,
+      employeeId: String(employeeId),
+      calibration: mergedCalibration,
+      goals: Array.isArray(payload.goals) ? payload.goals : review.goals || [],
+      checkIns: Array.isArray(payload.checkIns) ? payload.checkIns : review.checkIns || [],
+      midYear: payload.midYear || review.midYear || {},
+      yearEnd: payload.yearEnd || review.yearEnd || {},
+      development: payload.development || review.development || {},
+      approvals: Array.isArray(payload.approvals) ? payload.approvals : review.approvals || [],
+      reminders: Array.isArray(payload.reminders) ? payload.reminders : review.reminders || [],
+      updatedAt: new Date().toISOString()
+    };
+
+    const idx = records.findIndex(r => String(r.employeeId) === String(employeeId));
+    if (idx >= 0) {
+      records[idx] = updatedReview;
+    } else {
+      records.push(updatedReview);
+    }
+
+    await db.write();
+    res.json({ review: updatedReview });
   });
 
   // ---- BULK CSV UPLOAD ----

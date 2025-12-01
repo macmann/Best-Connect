@@ -203,7 +203,8 @@ const db = {
         candidates,
         holidays,
         settingsDocs,
-        salaries
+        salaries,
+        performanceReviews
       ] = await Promise.all([
         fetchCollection('employees'),
         fetchCollection('applications'),
@@ -212,7 +213,8 @@ const db = {
         fetchCollection('candidates'),
         fetchCollection('holidays'),
         fetchCollection('settings'),
-        fetchCollection('salaries')
+        fetchCollection('salaries'),
+        fetchCollection('performanceReviews')
       ]);
       const recruitmentApplications = Array.isArray(applications)
         ? applications.filter(app => app && app.type === 'recruitment')
@@ -235,7 +237,8 @@ const db = {
         candidates,
         holidays,
         settings,
-        salaries
+        salaries,
+        performanceReviews
       };
       lastLoadedAt = Date.now();
       logDbTrace('DB read completed', {
@@ -261,7 +264,8 @@ const db = {
       candidates = [],
       holidays = [],
       settings = {},
-      salaries = []
+      salaries = [],
+      performanceReviews = []
     } = this.data;
 
     const mergedApplications = [
@@ -277,7 +281,8 @@ const db = {
       syncCollection('candidates', candidates),
       syncCollection('holidays', holidays),
       syncSettings(settings),
-      syncCollection('salaries', salaries)
+      syncCollection('salaries', salaries),
+      syncCollection('performanceReviews', performanceReviews)
     ]);
     lastLoadedAt = Date.now();
   },
