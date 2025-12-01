@@ -119,6 +119,12 @@ const DEFAULT_LEAVE_BALANCES = {
 };
 const SUPPORTED_LEAVE_TYPES = ['annual', 'casual', 'medical'];
 
+function roundToOneDecimal(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.round(numeric * 10) / 10;
+}
+
 // Payload limit for incoming requests (default 3 MB to accommodate CV uploads)
 const BODY_LIMIT = process.env.BODY_LIMIT || '3mb';
 
@@ -893,7 +899,9 @@ function normalizeLeaveBalanceEntry(entry, defaults) {
   );
 
   return {
-    balance: Number.isFinite(balanceValue) ? balanceValue : baseDefaults.balance,
+    balance: roundToOneDecimal(
+      Number.isFinite(balanceValue) ? balanceValue : baseDefaults.balance
+    ),
     yearlyAllocation: Number.isFinite(yearlyAllocation)
       ? yearlyAllocation
       : baseDefaults.yearlyAllocation,
@@ -993,10 +1001,9 @@ function getLeaveBalanceValue(leaveBalances, type) {
   if (!leaveBalances || typeof leaveBalances !== 'object') return 0;
   const entry = leaveBalances[type];
   if (entry && typeof entry === 'object') {
-    return Number(entry.balance) || 0;
+    return roundToOneDecimal(entry.balance);
   }
-  const numeric = Number(entry);
-  return Number.isFinite(numeric) ? numeric : 0;
+  return roundToOneDecimal(entry);
 }
 
 function setLeaveBalanceValue(leaveBalances, type, value) {
