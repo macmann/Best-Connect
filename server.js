@@ -882,9 +882,14 @@ function normalizeLeaveBalanceEntry(entry, defaults) {
     typeof entry === 'object' && entry !== null && 'taken' in entry ? entry.taken : baseDefaults.taken
   );
 
+  const clampToAllocation = value => {
+    if (!Number.isFinite(value)) return value;
+    return Number.isFinite(yearlyAllocation) ? Math.min(value, yearlyAllocation) : value;
+  };
+
   return {
     balance: roundToOneDecimal(
-      Number.isFinite(balanceValue) ? balanceValue : baseDefaults.balance
+      clampToAllocation(Number.isFinite(balanceValue) ? balanceValue : baseDefaults.balance)
     ),
     yearlyAllocation: Number.isFinite(yearlyAllocation)
       ? yearlyAllocation
@@ -892,7 +897,9 @@ function normalizeLeaveBalanceEntry(entry, defaults) {
     monthlyAccrual: Number.isFinite(monthlyAccrual)
       ? monthlyAccrual
       : baseDefaults.monthlyAccrual,
-    accrued: roundToOneDecimal(Number.isFinite(accrued) ? accrued : baseDefaults.accrued),
+    accrued: roundToOneDecimal(
+      clampToAllocation(Number.isFinite(accrued) ? accrued : baseDefaults.accrued)
+    ),
     taken: roundToOneDecimal(Number.isFinite(taken) ? taken : baseDefaults.taken)
   };
 }
@@ -954,6 +961,31 @@ function ensureLeaveBalances(emp, options = {}) {
   }
 
   return updated;
+}
+
+function refreshEmployeeLeaveBalances(employee, data, options = {}) {
+  if (!employee || typeof employee !== 'object') {
+    return { updated: false, balances: null };
+  }
+
+  const asOfDate = options.asOfDate instanceof Date ? options.asOfDate : new Date();
+  const cycleRange = options.cycleRange || getCurrentCycleRange(asOfDate);
+  const applications = Array.isArray(data?.applications) ? data.applications : [];
+  const holidays = Array.isArray(data?.holidays) ? data.holidays : [];
+
+  const { balances } = buildEmployeeLeaveState(employee, applications, {
+    asOfDate,
+    cycleRange,
+    holidays
+  });
+
+  const current = employee.leaveBalances || {};
+  const hasChanged = JSON.stringify(current) !== JSON.stringify(balances);
+  if (hasChanged) {
+    employee.leaveBalances = balances;
+  }
+
+  return { updated: hasChanged, balances: employee.leaveBalances };
 }
 
 function normalizeBooleanFlag(value, defaultValue = false) {
@@ -4139,11 +4171,14 @@ init().then(async () => {
       return { status: 403, error: 'Employee account is inactive' };
     }
 
-    const leaveBalances =
-      employee.leaveBalances && typeof employee.leaveBalances === 'object'
-        ? { ...employee.leaveBalances }
-        : cloneDefaultLeaveBalances();
-    ensureLeaveBalances({ leaveBalances });
+    const { balances: leaveBalances, updated } = refreshEmployeeLeaveBalances(
+      employee,
+      db.data,
+      { asOfDate: new Date() }
+    );
+    if (updated) {
+      await db.write();
+    }
 
     const normalizedFrom =
       typeof from === 'string' ? from.trim() : fromDate.toISOString();
@@ -4435,11 +4470,14 @@ init().then(async () => {
       return res.status(404).json({ error: 'Employee not found.' });
     }
 
-    const leaveBalances =
-      employee.leaveBalances && typeof employee.leaveBalances === 'object'
-        ? { ...employee.leaveBalances }
-        : cloneDefaultLeaveBalances();
-    ensureLeaveBalances({ leaveBalances });
+    const { updated, balances: leaveBalances } = refreshEmployeeLeaveBalances(
+      employee,
+      db.data,
+      { asOfDate: new Date() }
+    );
+    if (updated) {
+      await db.write();
+    }
 
     const now = new Date();
     const previousLeaveDays = db.data.applications
