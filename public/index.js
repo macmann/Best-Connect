@@ -64,15 +64,19 @@ function isEmployeeActive(employee) {
   return isActiveEmployeeStatus(statusValue);
 }
 
+function roundToOneDecimal(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.round(numeric * 10) / 10;
+}
+
 function getLeaveBalanceValue(leaveBalances = {}, type) {
   if (!type) return 0;
   const entry = leaveBalances[type];
   if (entry && typeof entry === 'object') {
-    const value = Number(entry.balance);
-    return Number.isFinite(value) ? value : 0;
+    return roundToOneDecimal(entry.balance);
   }
-  const numeric = Number(entry);
-  return Number.isFinite(numeric) ? numeric : 0;
+  return roundToOneDecimal(entry);
 }
 
 function normalizeLeaveBalanceMap(leaveBalances = {}) {
@@ -86,8 +90,9 @@ function normalizeLeaveBalanceMap(leaveBalances = {}) {
 function setBalanceValue(elementId, value) {
   const el = document.getElementById(elementId);
   if (!el) return;
-  el.textContent = value;
-  el.classList.toggle('balance-negative', value < 0);
+  const rounded = roundToOneDecimal(value);
+  el.textContent = rounded.toFixed(1);
+  el.classList.toggle('balance-negative', rounded < 0);
 }
 
 function getNegativeBalanceTypes(balanceMap = {}) {

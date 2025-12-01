@@ -8,6 +8,12 @@ const DEFAULT_LEAVE_BALANCES = {
   medical: { balance: 0, yearlyAllocation: 14, monthlyAccrual: 14 / 12 }
 };
 
+function roundToOneDecimal(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.round(numeric * 10) / 10;
+}
+
 function normalizeNullableDate(value) {
   if (!value) return null;
   const parsed = value instanceof Date ? value : new Date(value);
@@ -40,7 +46,7 @@ function normalizeLeaveBalanceEntry(entry, defaults) {
   );
 
   return {
-    balance: Number.isFinite(balance) ? balance : baseDefaults.balance,
+    balance: roundToOneDecimal(Number.isFinite(balance) ? balance : baseDefaults.balance),
     yearlyAllocation: Number.isFinite(yearlyAllocation)
       ? yearlyAllocation
       : baseDefaults.yearlyAllocation,
@@ -83,7 +89,7 @@ function accrueEmployeeLeave(emp, monthStart) {
   SUPPORTED_LEAVE_TYPES.forEach(type => {
     const defaults = DEFAULT_LEAVE_BALANCES[type];
     const current = normalizeLeaveBalanceEntry(emp.leaveBalances[type], defaults);
-    const newBalance = current.balance + current.monthlyAccrual;
+    const newBalance = roundToOneDecimal(current.balance + current.monthlyAccrual);
 
     emp.leaveBalances[type] = { ...defaults, ...current, balance: newBalance };
     updated = true;
