@@ -232,7 +232,21 @@ const db = {
         employees,
         applications: leaveApplications,
         recruitmentApplications,
-        users,
+        users: Array.isArray(users)
+          ? users.map(user => {
+              if (!user) return user;
+              if (typeof user.twoFactorEnabled !== 'boolean') {
+                user.twoFactorEnabled = false;
+              }
+              if (typeof user.twoFactorSecret === 'undefined') {
+                user.twoFactorSecret = null;
+              }
+              if (typeof user.twoFactorTempSecret === 'undefined') {
+                user.twoFactorTempSecret = null;
+              }
+              return user;
+            })
+          : users,
         positions,
         candidates,
         holidays,

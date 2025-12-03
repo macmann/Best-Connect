@@ -11,6 +11,8 @@ const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const multer = require('multer');
+const speakeasy = require('speakeasy');
+const QRCode = require('qrcode');
 const { db, init, getDatabase } = require('./db');
 const {
   DEFAULT_LEAVE_BALANCES,
@@ -135,6 +137,20 @@ const INACTIVE_EMPLOYEE_STATUSES = new Set([
   'disabled',
   'terminated'
 ]);
+
+function applyUserSecurityDefaults(user) {
+  if (!user) return user;
+  if (typeof user.twoFactorEnabled !== 'boolean') {
+    user.twoFactorEnabled = false;
+  }
+  if (typeof user.twoFactorSecret === 'undefined') {
+    user.twoFactorSecret = null;
+  }
+  if (typeof user.twoFactorTempSecret === 'undefined') {
+    user.twoFactorTempSecret = null;
+  }
+  return user;
+}
 
 function normalizeRole(role) {
   return typeof role === 'string' ? role.trim().toLowerCase() : '';
@@ -1607,6 +1623,7 @@ function upsertUserForEmployee(emp) {
     role,
     employeeId: emp.id
   };
+  applyUserSecurityDefaults(user);
   db.data.users.push(user);
   return { created: true, changed: true, user };
 }
@@ -1617,6 +1634,26 @@ const WIDGET_JWT_EXPIRES_IN = Number(process.env.WIDGET_JWT_EXPIRES_IN || 300);
 
 function genToken() {
   return Math.random().toString(36).slice(2) + Date.now();
+}
+
+const TWO_FACTOR_PENDING = {}; // token: { userId, expiresAt }
+const TWO_FACTOR_PENDING_TTL_MS = Number(process.env.TWO_FACTOR_PENDING_TTL_MS || 5 * 60 * 1000);
+
+function createTwoFactorPendingToken(userId) {
+  const token = genToken();
+  const expiresAt = Date.now() + TWO_FACTOR_PENDING_TTL_MS;
+  TWO_FACTOR_PENDING[token] = { userId, expiresAt };
+  return token;
+}
+
+function resolvePendingTwoFactor(token) {
+  if (!token || !TWO_FACTOR_PENDING[token]) return null;
+  const entry = TWO_FACTOR_PENDING[token];
+  if (entry.expiresAt <= Date.now()) {
+    delete TWO_FACTOR_PENDING[token];
+    return null;
+  }
+  return entry.userId;
 }
 
 const CANDIDATE_STATUSES = [
@@ -1945,7 +1982,7 @@ async function resolveUserFromSession(token) {
     delete SESSION_TOKENS[token];
     return null;
   }
-  return user;
+  return applyUserSecurityDefaults(user);
 }
 
 function setSessionCookie(res, token) {
@@ -2338,7 +2375,9 @@ init().then(async () => {
     const user = db.data.users?.find(u => u.email === email && u.password === password);
 
     let userObj;
+    let requiresTwoFactor = false;
     if (user) {
+      applyUserSecurityDefaults(user);
       if (!isManagerRole(user.role)) {
         const employees = Array.isArray(db.data.employees) ? db.data.employees : [];
         const emp = employees.find(e => e.id == user.employeeId);
@@ -2350,23 +2389,91 @@ init().then(async () => {
         id: user.id,
         email: user.email,
         role: user.role,
-        employeeId: user.employeeId
+        employeeId: user.employeeId,
+        twoFactorEnabled: Boolean(user.twoFactorEnabled && user.twoFactorSecret)
       };
+      requiresTwoFactor = userObj.twoFactorEnabled;
     } else if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
       userObj = {
         id: 'admin',
         email: ADMIN_EMAIL,
         role: 'superadmin',
-        employeeId: null
+        employeeId: null,
+        twoFactorEnabled: false
       };
     } else {
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    if (requiresTwoFactor) {
+      const pendingToken = createTwoFactorPendingToken(userObj.id);
+      return res.json({ twoFactorRequired: true, token: pendingToken });
     }
 
     const token = genToken();
     SESSION_TOKENS[token] = userObj.id;
     setSessionCookie(res, token);
     res.json({ token, user: userObj });
+  });
+
+  app.post('/login/2fa', async (req, res) => {
+    const payload = req.body || {};
+    const pendingToken =
+      typeof payload.pendingToken === 'string'
+        ? payload.pendingToken.trim()
+        : typeof payload.token === 'string' && payload.token.length > 10
+          ? payload.token.trim()
+          : '';
+    const totpCode =
+      typeof payload.code === 'string'
+        ? payload.code.trim()
+        : typeof payload.totp === 'string'
+          ? payload.totp.trim()
+          : typeof payload.token === 'string' && payload.token.length <= 10
+            ? payload.token.trim()
+            : '';
+
+    if (!pendingToken || !totpCode) {
+      return res.status(400).json({ error: 'Two-factor token and code are required.' });
+    }
+
+    const userId = resolvePendingTwoFactor(pendingToken);
+    if (!userId) {
+      return res.status(401).json({ error: 'Two-factor session expired. Please login again.' });
+    }
+
+    await db.read();
+    const user = db.data.users?.find(u => u.id === userId);
+    if (!user || !user.twoFactorSecret) {
+      delete TWO_FACTOR_PENDING[pendingToken];
+      return res.status(401).json({ error: 'Two-factor authentication is not configured.' });
+    }
+    applyUserSecurityDefaults(user);
+
+    const verified = speakeasy.totp.verify({
+      secret: user.twoFactorSecret,
+      encoding: 'base32',
+      token: totpCode,
+      window: 1
+    });
+
+    if (!verified) {
+      return res.status(400).json({ error: 'Invalid authentication code.' });
+    }
+
+    delete TWO_FACTOR_PENDING[pendingToken];
+
+    const token = genToken();
+    SESSION_TOKENS[token] = user.id;
+    setSessionCookie(res, token);
+    const userObj = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      employeeId: user.employeeId,
+      twoFactorEnabled: Boolean(user.twoFactorEnabled && user.twoFactorSecret)
+    };
+    return res.json({ token, user: userObj });
   });
 
   app.get('/api/widget/token', async (req, res) => {
@@ -3658,6 +3765,94 @@ init().then(async () => {
         res.status(500).json({ error: 'Unable to save branding.' });
       }
     });
+  });
+
+  // ---- TWO-FACTOR AUTH ----
+  app.get('/api/settings/2fa/status', authRequired, async (req, res) => {
+    await db.read();
+    const user = db.data.users?.find(u => u.id === req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    applyUserSecurityDefaults(user);
+    return res.json({ twoFactorEnabled: Boolean(user.twoFactorEnabled && user.twoFactorSecret) });
+  });
+
+  app.post('/api/settings/2fa/setup', authRequired, async (req, res) => {
+    await db.read();
+    const user = db.data.users?.find(u => u.id === req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    applyUserSecurityDefaults(user);
+    if (user.twoFactorEnabled && user.twoFactorSecret) {
+      return res.status(400).json({ error: 'Two-factor authentication is already enabled.' });
+    }
+
+    try {
+      const secret = speakeasy.generateSecret({
+        name: `HR Portal (${user.email})`,
+        length: 20
+      });
+      const qrCodeDataUrl = await QRCode.toDataURL(secret.otpauth_url);
+      user.twoFactorTempSecret = secret.base32;
+      user.twoFactorSecret = null;
+      user.twoFactorEnabled = false;
+      await db.write();
+      return res.json({ qrCodeDataUrl, secretBase32: secret.base32 });
+    } catch (err) {
+      console.error('Failed to generate two-factor secret', err);
+      return res.status(500).json({ error: 'Unable to generate two-factor secret.' });
+    }
+  });
+
+  app.post('/api/settings/2fa/confirm', authRequired, async (req, res) => {
+    const payload = req.body || {};
+    const code = typeof payload.token === 'string' ? payload.token.trim() : '';
+    if (!code) {
+      return res.status(400).json({ error: 'Authentication code is required.' });
+    }
+
+    await db.read();
+    const user = db.data.users?.find(u => u.id === req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    applyUserSecurityDefaults(user);
+    if (!user.twoFactorTempSecret) {
+      return res.status(400).json({ error: 'Two-factor setup has not been started.' });
+    }
+
+    const verified = speakeasy.totp.verify({
+      secret: user.twoFactorTempSecret,
+      encoding: 'base32',
+      token: code,
+      window: 1
+    });
+
+    if (!verified) {
+      return res.status(400).json({ error: 'Invalid authentication code.' });
+    }
+
+    user.twoFactorSecret = user.twoFactorTempSecret;
+    user.twoFactorTempSecret = null;
+    user.twoFactorEnabled = true;
+    await db.write();
+    return res.json({ success: true });
+  });
+
+  app.post('/api/settings/2fa/disable', authRequired, async (req, res) => {
+    await db.read();
+    const user = db.data.users?.find(u => u.id === req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    applyUserSecurityDefaults(user);
+    user.twoFactorEnabled = false;
+    user.twoFactorSecret = null;
+    user.twoFactorTempSecret = null;
+    await db.write();
+    return res.json({ success: true });
   });
 
   // ---- EMAIL SETTINGS ----

@@ -1295,6 +1295,23 @@
               <input id="loginPassword" name="password" type="password" placeholder="Enter your password" required class="md-input">
             </div>
           </div>
+          <div id="twoFactorField" class="md-field hidden">
+            <label class="md-label" for="twoFactorCode">Authenticator code</label>
+            <div class="md-input-wrapper">
+              <span class="material-symbols-rounded">key</span>
+              <input
+                id="twoFactorCode"
+                name="twoFactorCode"
+                type="text"
+                class="md-input"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                maxlength="6"
+                placeholder="123456"
+              >
+            </div>
+            <p id="twoFactorPrompt" class="text-muted hidden">Enter the 6-digit code from your authenticator app.</p>
+          </div>
           <button type="submit" class="md-button md-button--filled">
             <span class="material-symbols-rounded">login</span>
             Sign In
@@ -2695,6 +2712,55 @@
 
         <div class="md-card">
           <div class="card-title">
+            <span class="material-symbols-rounded">security</span>
+            Two-Factor Authentication (2FA)
+          </div>
+          <p class="card-subtitle">Secure your account with a one-time passcode from your authenticator app.</p>
+          <div id="twoFactorStatus" class="settings-status text-muted">Loading two-factor status...</div>
+          <div class="settings-form__actions">
+            <button type="button" id="twoFactorEnableBtn" class="md-button md-button--filled md-button--small">
+              <span class="material-symbols-rounded">shield_lock</span>
+              Enable 2FA
+            </button>
+            <button type="button" id="twoFactorDisableBtn" class="md-button md-button--outlined md-button--small hidden">
+              <span class="material-symbols-rounded">shield</span>
+              Disable 2FA
+            </button>
+          </div>
+          <div id="twoFactorSetup" class="settings-form hidden">
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label">Scan QR code</label>
+              <div class="twofactor-qr">
+                <img id="twoFactorQr" src="" alt="Two-factor QR code" />
+              </div>
+              <p class="settings-form__help">Scan this code in your authenticator app, then enter the 6-digit code to confirm.</p>
+              <p class="settings-form__help" id="twoFactorSecretText"></p>
+            </div>
+            <div class="settings-form__fields">
+              <label class="md-label" for="twoFactorCodeInput">Authentication code</label>
+              <div class="md-input-wrapper">
+                <span class="material-symbols-rounded">key</span>
+                <input
+                  type="text"
+                  id="twoFactorCodeInput"
+                  class="md-input"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  maxlength="6"
+                  placeholder="123456"
+                />
+              </div>
+            </div>
+            <button type="button" id="twoFactorConfirmBtn" class="md-button md-button--filled md-button--small settings-form__submit">
+              <span class="material-symbols-rounded">check_circle</span>
+              Confirm &amp; Enable
+            </button>
+            <div id="twoFactorSetupError" class="settings-status text-muted"></div>
+          </div>
+        </div>
+
+        <div class="md-card" data-manager-only="true">
+          <div class="card-title">
             <span class="material-symbols-rounded">branding_watermark</span>
             Branding
           </div>
@@ -2737,7 +2803,7 @@
           <div id="brandingStatus" class="settings-status text-muted"></div>
         </div>
 
-        <div class="md-card">
+        <div class="md-card" data-manager-only="true">
           <div class="card-title">
             <span class="material-symbols-rounded">calendar_month</span>
             Holiday Calendar
@@ -2766,7 +2832,7 @@
           <div id="holidayList" class="holiday-list"></div>
         </div>
 
-        <div class="md-card">
+        <div class="md-card" data-manager-only="true">
           <div class="card-title">
             <span class="material-symbols-rounded">smart_toy</span>
             AI Configuration
@@ -2819,7 +2885,7 @@
           <div id="aiSettingsStatus" class="settings-status text-muted"></div>
         </div>
 
-        <div class="md-card">
+        <div class="md-card" data-manager-only="true">
           <div class="card-title">
             <span class="material-symbols-rounded">mail</span>
             Email Notifications
@@ -3008,7 +3074,7 @@
           <div id="emailSettingsStatus" class="settings-status text-muted"></div>
         </div>
 
-        <div class="md-card">
+        <div class="md-card" data-manager-only="true">
           <div class="card-title">
             <span class="material-symbols-rounded">terminal</span>
             API Testing Tools

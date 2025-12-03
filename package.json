@@ -21,7 +21,9 @@
     "node-cron": "^3.0.3",
     "nodemailer": "^6.10.1",
     "openai": "^6.9.1",
-    "pdf-parse": "^2.4.5"
+    "pdf-parse": "^2.4.5",
+    "qrcode": "^1.5.4",
+    "speakeasy": "^2.0.0"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",

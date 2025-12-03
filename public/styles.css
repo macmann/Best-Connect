@@ -133,6 +133,22 @@
   font-size: 0.9em;
 }
 
+.twofactor-qr {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+}
+
+.twofactor-qr img {
+  width: 200px;
+  max-width: 100%;
+  height: auto;
+}
+
 .form-actions {
   display: flex;
   align-items: center;

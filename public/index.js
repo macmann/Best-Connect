@@ -621,6 +621,9 @@ let aiModelOptions = [
   { value: 'gpt-5.1-mini', label: 'GPT5.1 mini' },
   { value: 'gpt-5.1-nano', label: 'GPT5.1nano' }
 ];
+let twoFactorSettings = { twoFactorEnabled: false };
+let twoFactorSetupState = { qrCodeDataUrl: '', secretBase32: '' };
+let twoFactorStatusLoaded = false;
 
 function normalizeCandidateId(value) {
   if (value === null || typeof value === 'undefined') return null;
@@ -721,28 +724,53 @@ document.getElementById('loginForm').onsubmit = async function(ev) {
   ev.preventDefault();
   const email = document.getElementById('loginEmail').value.trim();
   const password = document.getElementById('loginPassword').value.trim();
+  const code = document.getElementById('twoFactorCode').value.trim();
+  const loginBtn = ev.currentTarget.querySelector('button[type="submit"]');
+  if (loginBtn) loginBtn.disabled = true;
+  setLoginError('');
   try {
+    if (twoFactorPendingToken) {
+      if (!code) {
+        throw new Error('Enter the 6-digit code from your authenticator app.');
+      }
+      const res = await fetch('/login/2fa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pendingToken: twoFactorPendingToken, code })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 401) {
+          resetTwoFactorStep();
+        }
+        throw new Error(data.error || 'Invalid authentication code');
+      }
+      resetTwoFactorStep();
+      handleLoginSuccess(data);
+      return;
+    }
+
     const res = await fetch('/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
     });
-    if (!res.ok) throw new Error('Login failed');
-    const data = await res.json();
-    localStorage.setItem('hrconnect_token', data.token);
-    currentUser = data.user;
-    localStorage.setItem('hrconnect_user', JSON.stringify(currentUser));
-    queuePostLoginSync(currentUser?.employeeId);
-    updateChatWidgetUser(currentUser?.employeeId);
-    document.getElementById('loginPage').classList.add('hidden');
-    document.getElementById('logoutBtn').classList.remove('hidden');
-    document.getElementById('changePassBtn').classList.remove('hidden');
-    document.getElementById('mainApp').classList.remove('hidden');
-    toggleTabsByRole();
-    init();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Invalid email or password');
+    }
+    if (data.twoFactorRequired) {
+      twoFactorPendingToken = data.token;
+      showTwoFactorStep();
+      setLoginError('Two-factor verification required. Enter your authenticator code to continue.');
+      return;
+    }
+    resetTwoFactorStep();
+    handleLoginSuccess(data);
   } catch (e) {
-    document.getElementById('loginError').textContent = 'Invalid email or password';
-    document.getElementById('loginError').classList.remove('hidden');
+    setLoginError(e.message || 'Login failed');
+  } finally {
+    if (loginBtn) loginBtn.disabled = false;
   }
 };
 
@@ -788,6 +816,64 @@ function apiFetch(path, options = {}) {
   options.headers = options.headers || {};
   if (token) options.headers['Authorization'] = 'Bearer ' + token;
   return fetch(API + path, options);
+}
+
+let twoFactorPendingToken = null;
+
+function setLoginError(message) {
+  const errorEl = document.getElementById('loginError');
+  if (!errorEl) return;
+  if (message) {
+    errorEl.textContent = message;
+    errorEl.classList.remove('hidden');
+  } else {
+    errorEl.textContent = '';
+    errorEl.classList.add('hidden');
+  }
+}
+
+function resetTwoFactorStep() {
+  twoFactorPendingToken = null;
+  const field = document.getElementById('twoFactorField');
+  if (field) field.classList.add('hidden');
+  const prompt = document.getElementById('twoFactorPrompt');
+  if (prompt) prompt.classList.add('hidden');
+  const codeInput = document.getElementById('twoFactorCode');
+  if (codeInput) codeInput.value = '';
+  const emailInput = document.getElementById('loginEmail');
+  if (emailInput) emailInput.disabled = false;
+  const passwordInput = document.getElementById('loginPassword');
+  if (passwordInput) passwordInput.disabled = false;
+}
+
+function showTwoFactorStep() {
+  const field = document.getElementById('twoFactorField');
+  if (field) field.classList.remove('hidden');
+  const prompt = document.getElementById('twoFactorPrompt');
+  if (prompt) prompt.classList.remove('hidden');
+  const codeInput = document.getElementById('twoFactorCode');
+  if (codeInput) {
+    codeInput.value = '';
+    codeInput.focus();
+  }
+  const emailInput = document.getElementById('loginEmail');
+  if (emailInput) emailInput.disabled = true;
+  const passwordInput = document.getElementById('loginPassword');
+  if (passwordInput) passwordInput.disabled = true;
+}
+
+function handleLoginSuccess(data) {
+  localStorage.setItem('hrconnect_token', data.token);
+  currentUser = data.user;
+  localStorage.setItem('hrconnect_user', JSON.stringify(currentUser));
+  queuePostLoginSync(currentUser?.employeeId);
+  updateChatWidgetUser(currentUser?.employeeId);
+  document.getElementById('loginPage').classList.add('hidden');
+  document.getElementById('logoutBtn').classList.remove('hidden');
+  document.getElementById('changePassBtn').classList.remove('hidden');
+  document.getElementById('mainApp').classList.remove('hidden');
+  toggleTabsByRole();
+  init();
 }
 
 const toastContainer = document.getElementById('toastContainer');
@@ -982,6 +1068,7 @@ function showPanel(name) {
   if (name === 'settings') {
     settingsPanel.classList.remove('hidden');
     if (settingsBtn) settingsBtn.classList.add('active-tab');
+    loadTwoFactorStatus();
     if (isManagerRole(currentUser?.role)) {
       loadBrandingSettingsConfig();
       loadHolidays();
@@ -1019,13 +1106,24 @@ function toggleTabsByRole() {
   const managerVisible = isManagerRole(currentUser?.role);
   const superAdminVisible = isSuperAdmin(currentUser);
 
-  [manageTab, recruitmentTab, managerAppsTab, leaveReportTab, locationTab, settingsTab].forEach(tab => {
+  [manageTab, recruitmentTab, managerAppsTab, leaveReportTab, locationTab].forEach(tab => {
     if (!tab) return;
     tab.classList.toggle('hidden', !managerVisible);
   });
 
+  if (settingsTab) {
+    settingsTab.classList.remove('hidden');
+  }
+
   if (financeTab) {
     financeTab.classList.toggle('hidden', !superAdminVisible);
+  }
+
+  const settingsPanel = document.getElementById('settingsPanel');
+  if (settingsPanel) {
+    settingsPanel.querySelectorAll('[data-manager-only]').forEach(card => {
+      card.classList.toggle('hidden', !managerVisible);
+    });
   }
 
   refreshTabGroupVisibility();
@@ -3470,6 +3568,188 @@ async function onBrandingSubmit(ev) {
   }
 }
 
+function renderTwoFactorSettings() {
+  const statusEl = document.getElementById('twoFactorStatus');
+  const enableBtn = document.getElementById('twoFactorEnableBtn');
+  const disableBtn = document.getElementById('twoFactorDisableBtn');
+  const setupEl = document.getElementById('twoFactorSetup');
+  const qrImg = document.getElementById('twoFactorQr');
+  const secretText = document.getElementById('twoFactorSecretText');
+  const codeInput = document.getElementById('twoFactorCodeInput');
+  const errorEl = document.getElementById('twoFactorSetupError');
+  const enabled = Boolean(twoFactorSettings.twoFactorEnabled);
+
+  if (statusEl) {
+    statusEl.textContent = enabled
+      ? 'Two-factor authentication is enabled on your account.'
+      : 'Two-factor authentication is currently disabled.';
+    statusEl.classList.remove('settings-status--error');
+  }
+  if (enableBtn) enableBtn.classList.toggle('hidden', enabled);
+  if (disableBtn) disableBtn.classList.toggle('hidden', !enabled);
+  if (setupEl) setupEl.classList.toggle('hidden', enabled || !twoFactorSetupState.qrCodeDataUrl);
+  if (qrImg) qrImg.src = twoFactorSetupState.qrCodeDataUrl || '';
+  if (secretText) {
+    secretText.textContent = twoFactorSetupState.secretBase32
+      ? `Or enter this code manually: ${twoFactorSetupState.secretBase32}`
+      : '';
+  }
+  if (!twoFactorSetupState.qrCodeDataUrl && codeInput) {
+    codeInput.value = '';
+  }
+  if (errorEl) {
+    errorEl.classList.remove('settings-status--error');
+    if (!errorEl.textContent) {
+      errorEl.classList.add('text-muted');
+    }
+  }
+}
+
+async function fetchTwoFactorSettings({ force = false } = {}) {
+  if (!force && twoFactorStatusLoaded) return twoFactorSettings;
+  const res = await apiFetch('/api/settings/2fa/status');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'Unable to load two-factor status.');
+  }
+  twoFactorSettings = { twoFactorEnabled: Boolean(data.twoFactorEnabled) };
+  twoFactorStatusLoaded = true;
+  return twoFactorSettings;
+}
+
+async function loadTwoFactorStatus({ force = false } = {}) {
+  const statusEl = document.getElementById('twoFactorStatus');
+  if (statusEl) {
+    statusEl.textContent = 'Loading two-factor status...';
+    statusEl.classList.remove('settings-status--error');
+  }
+  try {
+    await fetchTwoFactorSettings({ force });
+    twoFactorSetupState = { qrCodeDataUrl: '', secretBase32: '' };
+    renderTwoFactorSettings();
+  } catch (err) {
+    if (statusEl) {
+      statusEl.textContent = err.message || 'Unable to load two-factor status.';
+      statusEl.classList.add('settings-status--error');
+    }
+  }
+}
+
+async function startTwoFactorSetup(ev) {
+  if (ev) ev.preventDefault();
+  const errorEl = document.getElementById('twoFactorSetupError');
+  if (errorEl) {
+    errorEl.textContent = '';
+    errorEl.classList.add('text-muted');
+    errorEl.classList.remove('settings-status--error');
+  }
+  const statusEl = document.getElementById('twoFactorStatus');
+  try {
+    const res = await apiFetch('/api/settings/2fa/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Unable to start two-factor setup.');
+    }
+    twoFactorSetupState = {
+      qrCodeDataUrl: data.qrCodeDataUrl || '',
+      secretBase32: data.secretBase32 || ''
+    };
+    twoFactorSettings.twoFactorEnabled = false;
+    renderTwoFactorSettings();
+    if (statusEl) {
+      statusEl.textContent = 'Scan the QR code and enter the code to finish enabling 2FA.';
+    }
+  } catch (err) {
+    if (errorEl) {
+      errorEl.textContent = err.message || 'Unable to start two-factor setup.';
+      errorEl.classList.remove('text-muted');
+      errorEl.classList.add('settings-status--error');
+    }
+  }
+}
+
+async function confirmTwoFactorSetup(ev) {
+  if (ev) ev.preventDefault();
+  const codeInput = document.getElementById('twoFactorCodeInput');
+  const code = codeInput?.value.trim();
+  const errorEl = document.getElementById('twoFactorSetupError');
+  const statusEl = document.getElementById('twoFactorStatus');
+  if (!code) {
+    if (errorEl) {
+      errorEl.textContent = 'Enter the 6-digit code to confirm two-factor authentication.';
+      errorEl.classList.remove('text-muted');
+      errorEl.classList.add('settings-status--error');
+    }
+    return;
+  }
+  if (errorEl) {
+    errorEl.textContent = '';
+    errorEl.classList.add('text-muted');
+    errorEl.classList.remove('settings-status--error');
+  }
+  try {
+    const res = await apiFetch('/api/settings/2fa/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: code })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Unable to confirm two-factor authentication.');
+    }
+    twoFactorSettings.twoFactorEnabled = true;
+    twoFactorSetupState = { qrCodeDataUrl: '', secretBase32: '' };
+    twoFactorStatusLoaded = true;
+    if (codeInput) codeInput.value = '';
+    renderTwoFactorSettings();
+    if (statusEl) {
+      statusEl.textContent = 'Two-factor authentication is enabled on your account.';
+    }
+  } catch (err) {
+    if (errorEl) {
+      errorEl.textContent = err.message || 'Invalid authentication code.';
+      errorEl.classList.remove('text-muted');
+      errorEl.classList.add('settings-status--error');
+    }
+  }
+}
+
+async function disableTwoFactor(ev) {
+  if (ev) ev.preventDefault();
+  const statusEl = document.getElementById('twoFactorStatus');
+  const errorEl = document.getElementById('twoFactorSetupError');
+  if (errorEl) {
+    errorEl.textContent = '';
+    errorEl.classList.add('text-muted');
+    errorEl.classList.remove('settings-status--error');
+  }
+  try {
+    const res = await apiFetch('/api/settings/2fa/disable', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Unable to disable two-factor authentication.');
+    }
+    twoFactorSettings = { twoFactorEnabled: false };
+    twoFactorSetupState = { qrCodeDataUrl: '', secretBase32: '' };
+    renderTwoFactorSettings();
+    if (statusEl) {
+      statusEl.textContent = 'Two-factor authentication is currently disabled.';
+    }
+  } catch (err) {
+    if (errorEl) {
+      errorEl.textContent = err.message || 'Unable to disable two-factor authentication.';
+      errorEl.classList.remove('text-muted');
+      errorEl.classList.add('settings-status--error');
+    }
+  }
+}
+
 function setAiSettingsStatus(message, type = 'info') {
   const statusEl = document.getElementById('aiSettingsStatus');
   if (!statusEl) return;
@@ -5706,6 +5986,12 @@ async function init() {
   if (aiForm) aiForm.addEventListener('submit', onAiSettingsSubmit);
   const brandingForm = document.getElementById('brandingForm');
   if (brandingForm) brandingForm.addEventListener('submit', onBrandingSubmit);
+  const twoFaEnableBtn = document.getElementById('twoFactorEnableBtn');
+  if (twoFaEnableBtn) twoFaEnableBtn.addEventListener('click', startTwoFactorSetup);
+  const twoFaConfirmBtn = document.getElementById('twoFactorConfirmBtn');
+  if (twoFaConfirmBtn) twoFaConfirmBtn.addEventListener('click', confirmTwoFactorSetup);
+  const twoFaDisableBtn = document.getElementById('twoFactorDisableBtn');
+  if (twoFaDisableBtn) twoFaDisableBtn.addEventListener('click', disableTwoFactor);
   const brandingLogoInput = document.getElementById('brandingLogo');
   if (brandingLogoInput) {
     brandingLogoInput.addEventListener('change', () => {
