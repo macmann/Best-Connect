@@ -27,6 +27,15 @@ Run the migration script to backfill leave balance metadata for all employees. T
 node scripts/migrateLeaveSystem.js
 ```
 
+### MongoDB connectivity options
+
+If your hosting environment requires explicit TLS settings, configure the database client with these environment variables:
+
+- `MONGODB_FORCE_TLS=true` to always enable TLS (enabled automatically for `mongodb+srv://` URLs).
+- `MONGODB_TLS_MIN_VERSION=TLSv1.2` to pin the minimum TLS version (defaults to `TLSv1.2`).
+- `MONGODB_TLS_ALLOW_INVALID_CERTS=true` to allow self-signed certificates when debugging connection issues.
+- `MONGODB_SERVER_SELECTION_TIMEOUT_MS` to adjust how long the driver waits for a healthy node (defaults to `30000`).
+
 ## Security note
 
 For demo purposes the Atenxion bearer token is embedded directly in the client-side code. In production you should proxy this request through your backend or use another secure relay so the token is not exposed to end users.
