@@ -5,7 +5,24 @@ const { performance } = require('perf_hooks');
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
 const DB_NAME = process.env.MONGODB_DB || 'brillarhrportal';
 
-const client = new MongoClient(MONGODB_URI);
+const mongoClientOptions = {
+  serverSelectionTimeoutMS: Number(
+    process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS || 30000
+  )
+};
+
+const forceTls = process.env.MONGODB_FORCE_TLS === 'true';
+if (forceTls || MONGODB_URI.startsWith('mongodb+srv://')) {
+  mongoClientOptions.tls = true;
+  mongoClientOptions.minVersion = process.env.MONGODB_TLS_MIN_VERSION || 'TLSv1.2';
+}
+
+if (process.env.MONGODB_TLS_ALLOW_INVALID_CERTS === 'true') {
+  mongoClientOptions.tlsAllowInvalidCertificates = true;
+  mongoClientOptions.tlsAllowInvalidHostnames = true;
+}
+
+const client = new MongoClient(MONGODB_URI, mongoClientOptions);
 let database;
 
 const DB_CACHE_TTL_MS = Number(process.env.DB_CACHE_TTL_MS || 0);
@@ -21,9 +38,30 @@ function logDbTrace(message, meta) {
   console.log(`[DB TRACE] ${timestamp} ${message}${serializedMeta}`);
 }
 
+function sanitizeMongoUri(uri) {
+  try {
+    const parsed = new URL(uri);
+    if (parsed.username) {
+      parsed.username = '***';
+    }
+    if (parsed.password) {
+      parsed.password = '***';
+    }
+    return parsed.toString();
+  } catch (error) {
+    return uri.replace(/:\/\/[^@]*@/, '://***@');
+  }
+}
+
 async function init() {
   if (!database) {
-    logDbTrace('Connecting to MongoDB', { uri: MONGODB_URI, db: DB_NAME });
+    logDbTrace('Connecting to MongoDB', {
+      uri: sanitizeMongoUri(MONGODB_URI),
+      db: DB_NAME,
+      tls: Boolean(mongoClientOptions.tls),
+      tlsMinVersion: mongoClientOptions.minVersion,
+      tlsAllowInvalidCertificates: mongoClientOptions.tlsAllowInvalidCertificates
+    });
     const start = performance.now();
     try {
       await client.connect();
