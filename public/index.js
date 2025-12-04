@@ -4,16 +4,13 @@ let currentUser = null;
 let calendarCurrent = new Date();
 let empSearchTerm = '';
 const employeeGridState = {
-  sort: { key: '', direction: 'asc' },
-  columnVisibility: {},
-  columnWidths: {},
-  expanded: new Set(),
-  view: 'table',
+  sort: { key: 'name', direction: 'asc' },
   page: 1,
   pageSize: 8,
   statusFilter: 'all',
-  internFilter: 'all'
+  departmentFilter: 'all'
 };
+let employeeManageContext = { employees: [], keys: {} };
 let companyHolidays = [];
 let holidaysLoaded = false;
 let holidaysLoading = null;
@@ -1936,42 +1933,196 @@ function onDevelopmentListClick(ev) {
   persistPerformance();
 }
 
-async function ensurePerformanceExperience() {
-  if (performanceInitialized) {
-    if (performanceEmployeeId) await loadPerformanceReview(performanceEmployeeId);
+const dashboardListIcons = {
+  interview: 'calendar_today',
+  leave: 'event',
+  fallback: 'info'
+};
+
+function setDashboardStat(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
+function getDashboardEmployeeKeys(employees = []) {
+  const sample = employees[0] || {};
+  const findKey = (aliases, fallback = '') => {
+    return Object.keys(sample).find(k => aliases.includes(k.toLowerCase())) || fallback;
+  };
+  return {
+    joinDateKey: findKey(['joindate', 'joiningdate', 'startdate', 'date of joining']),
+    departmentKey: findKey(['department', 'dept']),
+    statusKey: findKey(['status'])
+  };
+}
+
+function parseDashboardDate(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function isCurrentMonth(date) {
+  if (!(date instanceof Date)) return false;
+  const now = new Date();
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+}
+
+function formatDashboardDate(date) {
+  if (!(date instanceof Date)) return '';
+  return date.toLocaleString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function renderDashboardList(containerId, items = [], emptyText = 'Nothing to show yet.') {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  if (!items.length) {
+    container.innerHTML = `<div class="py-3 text-sm text-slate-500">${escapeHtml(emptyText)}</div>`;
     return;
   }
+  container.innerHTML = items.map(item => {
+    const icon = dashboardListIcons[item.kind] || dashboardListIcons.fallback;
+    const badge = item.badge
+      ? `<span class="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-600">${escapeHtml(item.badge)}</span>`
+      : '';
+    const meta = item.meta ? `<p class="text-sm text-slate-500">${escapeHtml(item.meta)}</p>` : '';
+    const note = item.note ? `<p class="text-xs text-slate-400">${escapeHtml(item.note)}</p>` : '';
+    return `
+      <div class="flex items-start justify-between gap-3 py-3">
+        <div class="flex items-start gap-3">
+          <span class="material-symbols-rounded mt-1 rounded-xl bg-slate-100 p-2 text-slate-600">${icon}</span>
+          <div>
+            <p class="text-sm font-semibold text-slate-900">${escapeHtml(item.title)}</p>
+            ${meta}
+            ${note}
+          </div>
+        </div>
+        ${badge}
+      </div>
+    `;
+  }).join('');
+}
+
+function buildMockInterviews() {
+  return [
+    {
+      kind: 'interview',
+      title: 'Interview schedule to be connected',
+      meta: 'TODO: Replace with real interviews endpoint',
+      badge: 'Placeholder'
+    }
+  ];
+}
+
+function mapUpcomingInterviews(raw = []) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(Boolean)
+    .slice(0, 5)
+    .map(int => {
+      const candidate = int.candidate || int.candidateName || 'TBD candidate';
+      const role = int.position || int.role || int.positionTitle || '';
+      const when = formatDashboardDate(parseDashboardDate(int.scheduledAt || int.date || int.interviewDate));
+      return {
+        kind: 'interview',
+        title: role ? `${candidate} — ${role}` : candidate,
+        meta: when || 'Scheduling soon',
+        badge: int.stage || int.type || 'Interview'
+      };
+    });
+}
+
+function mapUpcomingLeaves(apps = [], emps = []) {
+  const employees = Array.isArray(emps) ? emps : [];
+  const now = new Date();
+  const nextWeek = new Date();
+  nextWeek.setDate(now.getDate() + 7);
+  return (Array.isArray(apps) ? apps : [])
+    .filter(app => {
+      const from = parseDashboardDate(app.from);
+      const to = parseDashboardDate(app.to);
+      if (!from || !to) return false;
+      return (from <= nextWeek && to >= now);
+    })
+    .sort((a, b) => new Date(a.from) - new Date(b.from))
+    .slice(0, 5)
+    .map(app => {
+      const emp = employees.find(e => e.id == app.employeeId);
+      const name = emp ? emp.name || emp.employeeName || 'Unknown' : 'Unknown';
+      const meta = `${app.from} → ${app.to}`;
+      const today = new Date().toISOString().slice(0, 10);
+      const badge = app.from === today ? 'On leave today' : 'Upcoming';
+      return {
+        kind: 'leave',
+        title: `${name} — ${capitalize(app.type || 'leave')} leave`,
+        meta,
+        badge
+      };
+    });
+}
+
+async function loadDashboardOverview() {
+  const [employees, positionsResponse, pendingApps, approvedApps] = await Promise.all([
+    getJSON('/employees'),
+    getJSON('/recruitment/positions').catch(() => []),
+    getJSON('/applications?status=pending').catch(() => []),
+    getJSON('/applications?status=approved').catch(() => [])
+  ]);
+
+  const positions = Array.isArray(recruitmentPositions) && recruitmentPositions.length
+    ? recruitmentPositions
+    : (Array.isArray(positionsResponse) ? positionsResponse : []);
+  const normalizedPositions = positions.map(pos => ({ ...pos, status: normalizePositionStatus(pos.status) }));
+  const { joinDateKey } = getDashboardEmployeeKeys(employees);
+
+  const totalEmployees = Array.isArray(employees) ? employees.length : 0;
+  const newHires = Array.isArray(employees)
+    ? employees.filter(emp => isCurrentMonth(parseDashboardDate(emp[joinDateKey]))).length
+    : 0;
+  const openPositions = normalizedPositions.filter(pos => pos.status !== 'Closed').length;
+  const pendingLeaves = Array.isArray(pendingApps) ? pendingApps.length : 0;
+
+  setDashboardStat('totalEmployeesStat', totalEmployees);
+  setDashboardStat('newHiresStat', newHires);
+  setDashboardStat('openPositionsStat', openPositions);
+  setDashboardStat('pendingLeaveStat', pendingLeaves);
+
+  let interviews = [];
+  try {
+    // TODO: replace with backend endpoint for upcoming interviews
+    const interviewResponse = await getJSON('/recruitment/interviews?scope=upcoming');
+    interviews = mapUpcomingInterviews(interviewResponse);
+  } catch (err) {
+    console.warn('Falling back to mock interviews list', err);
+  }
+
+  if (!interviews.length) {
+    interviews = buildMockInterviews();
+  }
+
+  const upcomingLeaves = mapUpcomingLeaves(approvedApps, employees);
+
+  renderDashboardList(
+    'upcomingInterviewsList',
+    interviews,
+    'No upcoming interviews scheduled. Add interviews in Recruitment to see them here.'
+  );
+  renderDashboardList(
+    'upcomingLeavesList',
+    upcomingLeaves,
+    'No approved leaves for today or the next week.'
+  );
+}
+
+async function ensurePerformanceExperience() {
   performanceInitialized = true;
-  performanceState = performanceState || normalizePerformanceState({});
-  const goalForm = document.getElementById('performanceGoalForm');
-  const checkInForm = document.getElementById('checkInForm');
-  const midYearForm = document.getElementById('midYearForm');
-  const yearEndForm = document.getElementById('yearEndForm');
-  const devForm = document.getElementById('developmentForm');
-  const goalList = document.getElementById('performanceGoalList');
-  const yearEndGoals = document.getElementById('yearEndGoals');
-  const yearEndCompetencies = document.getElementById('yearEndCompetencies');
-  const calibrationButton = document.getElementById('calibrationSave');
-  const calibrationToggle = document.getElementById('calibrationToggle');
-  const trainingButton = document.getElementById('addTraining');
-  const followUpButton = document.getElementById('addFollowUp');
-  const devLists = document.getElementById('developmentForm');
-
-  if (goalForm) goalForm.addEventListener('submit', onGoalSubmit);
-  if (goalList) goalList.addEventListener('click', onGoalListClick);
-  if (checkInForm) checkInForm.addEventListener('submit', onCheckInSubmit);
-  if (midYearForm) midYearForm.addEventListener('submit', onMidYearSubmit);
-  if (yearEndForm) yearEndForm.addEventListener('submit', onYearEndSubmit);
-  if (yearEndGoals) yearEndGoals.addEventListener('input', onYearEndChange);
-  if (yearEndCompetencies) yearEndCompetencies.addEventListener('input', onYearEndChange);
-  if (calibrationButton) calibrationButton.addEventListener('click', onCalibrationSave);
-  if (calibrationToggle) calibrationToggle.addEventListener('click', onCalibrationToggle);
-  if (devForm) devForm.addEventListener('submit', onDevelopmentSubmit);
-  if (trainingButton) trainingButton.addEventListener('click', onTrainingAdd);
-  if (followUpButton) followUpButton.addEventListener('click', onFollowUpAdd);
-  if (devLists) devLists.addEventListener('click', onDevelopmentListClick);
-
-  await loadPerformanceEmployees();
+  await loadDashboardOverview();
 }
 
 function getCurrentPayrollMonthValue() {
@@ -6219,7 +6370,12 @@ async function init() {
   showPanel(defaultPanel);
 
   document.getElementById('empTableBody').addEventListener('click', onEmpTableClick);
-  document.getElementById('empTableBody').addEventListener('change', onInternFlagChange);
+
+  const employeeDrawerClose = document.getElementById('employeeDrawerClose');
+  const employeeDrawerOverlay = document.getElementById('employeeDrawerOverlay');
+  [employeeDrawerClose, employeeDrawerOverlay].forEach(el => {
+    if (el) el.addEventListener('click', closeEmployeeDrawer);
+  });
 
   const emailForm = document.getElementById('emailSettingsForm');
   if (emailForm) emailForm.addEventListener('submit', onEmailSettingsSubmit);
@@ -6339,19 +6495,19 @@ async function init() {
     });
   }
 
-  const employeeStatusFilter = document.getElementById('employeeStatusFilter');
-  if (employeeStatusFilter) {
-    employeeStatusFilter.addEventListener('change', () => {
-      employeeGridState.statusFilter = employeeStatusFilter.value;
+  const employeeDepartmentFilter = document.getElementById('employeeDepartmentFilter');
+  if (employeeDepartmentFilter) {
+    employeeDepartmentFilter.addEventListener('change', () => {
+      employeeGridState.departmentFilter = employeeDepartmentFilter.value;
       employeeGridState.page = 1;
       loadEmployeesManage();
     });
   }
 
-  const employeeInternFilter = document.getElementById('employeeInternFilter');
-  if (employeeInternFilter) {
-    employeeInternFilter.addEventListener('change', () => {
-      employeeGridState.internFilter = employeeInternFilter.value;
+  const employeeStatusFilter = document.getElementById('employeeStatusFilter');
+  if (employeeStatusFilter) {
+    employeeStatusFilter.addEventListener('change', () => {
+      employeeGridState.statusFilter = employeeStatusFilter.value;
       employeeGridState.page = 1;
       loadEmployeesManage();
     });
@@ -6362,27 +6518,6 @@ async function init() {
     employeePageSize.addEventListener('change', () => {
       employeeGridState.pageSize = Number(employeePageSize.value) || 8;
       employeeGridState.page = 1;
-      loadEmployeesManage();
-    });
-  }
-
-  const tableViewBtn = document.getElementById('tableViewBtn');
-  const cardViewBtn = document.getElementById('cardViewBtn');
-  if (tableViewBtn && cardViewBtn) {
-    tableViewBtn.addEventListener('click', () => {
-      employeeGridState.view = 'table';
-      tableViewBtn.classList.add('view-toggle__btn--active');
-      cardViewBtn.classList.remove('view-toggle__btn--active');
-      document.getElementById('employeeCardWrapper')?.classList.add('hidden');
-      document.querySelector('.data-grid-card')?.classList.remove('hidden');
-      loadEmployeesManage();
-    });
-    cardViewBtn.addEventListener('click', () => {
-      employeeGridState.view = 'cards';
-      cardViewBtn.classList.add('view-toggle__btn--active');
-      tableViewBtn.classList.remove('view-toggle__btn--active');
-      document.getElementById('employeeCardWrapper')?.classList.remove('hidden');
-      document.querySelector('.data-grid-card')?.classList.add('hidden');
       loadEmployeesManage();
     });
   }
@@ -7023,63 +7158,147 @@ window.cancelApp = async function(appId) {
 
 // ======== EMPLOYEE MANAGEMENT LOGIC ========
 
+function renderEmployeeStatusPill(status) {
+  const normalized = String(status || '').toLowerCase();
+  const active = isActiveEmployeeStatus(normalized);
+  const baseClass = active
+    ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+    : 'bg-amber-50 text-amber-700 ring-amber-200';
+  const label = status || (active ? 'Active' : 'Inactive');
+  return `<span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${baseClass}">${escapeHtml(label)}</span>`;
+}
+
+function renderDrawerValue(value) {
+  if (value === null || value === undefined || value === '') {
+    return '<span class="text-slate-400">Not provided</span>';
+  }
+  return escapeHtml(String(value));
+}
+
+function drawerItem(label, value, isHtml = false) {
+  const content = isHtml ? value : renderDrawerValue(value);
+  return `<div class="space-y-1">
+    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">${escapeHtml(label)}</p>
+    <p class="text-sm text-slate-800">${content}</p>
+  </div>`;
+}
+
+function buildEmployeeDrawerContent(emp, keys = {}) {
+  const {
+    nameKey = 'name',
+    positionKey,
+    departmentKey,
+    emailKey,
+    phoneKey,
+    joinDateKey,
+    notesKey,
+    statusKey = 'status',
+    employeeIdKey
+  } = keys;
+
+  const leaveBalances = normalizeLeaveBalanceMap(emp.leaveBalances || emp.leavebalances || {});
+  const leaveTypes = [
+    { key: 'annual', label: 'Annual' },
+    { key: 'casual', label: 'Casual' },
+    { key: 'medical', label: 'Medical' }
+  ];
+
+  const emailValue = emailKey && emp[emailKey]
+    ? `<a href="mailto:${escapeHtml(emp[emailKey])}" class="text-indigo-600 hover:text-indigo-700">${escapeHtml(emp[emailKey])}</a>`
+    : renderDrawerValue('');
+
+  const statusBadge = renderEmployeeStatusPill(emp[statusKey]);
+
+  return `
+    <div class="space-y-6">
+      <div class="flex items-start justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Employee</p>
+          <p class="text-lg font-semibold text-slate-900">${renderDrawerValue(emp[nameKey] || 'Unnamed')}</p>
+          <p class="text-sm text-slate-600">${renderDrawerValue(positionKey ? emp[positionKey] : '')}</p>
+        </div>
+        ${statusBadge}
+      </div>
+
+      <div class="space-y-3 rounded-xl border border-slate-200 px-4 py-4">
+        <h4 class="text-sm font-semibold text-slate-900">Basic info</h4>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          ${drawerItem('Email', emailValue, true)}
+          ${drawerItem('Phone', phoneKey ? emp[phoneKey] : '')}
+          ${drawerItem('Employee ID', employeeIdKey ? emp[employeeIdKey] : '')}
+        </div>
+      </div>
+
+      <div class="space-y-3 rounded-xl border border-slate-200 px-4 py-4">
+        <h4 class="text-sm font-semibold text-slate-900">Job info</h4>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          ${drawerItem('Position', positionKey ? emp[positionKey] : '')}
+          ${drawerItem('Department', departmentKey ? emp[departmentKey] : '')}
+          ${drawerItem('Start date', joinDateKey ? emp[joinDateKey] : '')}
+        </div>
+      </div>
+
+      <div class="space-y-4 rounded-xl border border-slate-200 px-4 py-4">
+        <div class="flex items-center justify-between gap-3">
+          <h4 class="text-sm font-semibold text-slate-900">HR info</h4>
+          <div class="text-xs text-slate-500">Balances & notes</div>
+        </div>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          ${leaveTypes.map(type => `
+            <div class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">${escapeHtml(type.label)}</p>
+              <p class="text-lg font-semibold text-slate-900">${leaveBalances[type.key] ?? 0}<span class="ml-1 text-xs font-medium text-slate-500">days</span></p>
+            </div>
+          `).join('')}
+        </div>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          ${drawerItem('Status', statusBadge, true)}
+          ${drawerItem('Notes', notesKey ? emp[notesKey] : '')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 async function loadEmployeesManage() {
   const emps = await getJSON('/employees');
   const employees = Array.isArray(emps) ? emps : [];
   const head = document.getElementById('empTableHead');
   const body = document.getElementById('empTableBody');
   const pagination = document.getElementById('empPagination');
-  const dataGridCard = document.querySelector('.data-grid-card');
-  const cardsWrapper = document.getElementById('employeeCardWrapper');
 
-  if (!head || !body) return;
-
-  const internFlagKey = employees.length
-    ? Object.keys(employees[0]).find(k => k.toLowerCase() === 'internflag') || 'internFlag'
-    : 'internFlag';
-  const internFlagKeyNormalized = internFlagKey.toLowerCase();
-  const normalizedEmps = employees.map(emp => ({
-    ...emp,
-    [internFlagKey]: normalizeInternFlag(emp ? emp[internFlagKey] : false)
-  }));
+  if (!head || !body || !pagination) return;
 
   const searchInput = document.getElementById('empSearchInput');
   if (searchInput && searchInput.value !== empSearchTerm) {
     searchInput.value = empSearchTerm;
   }
+
   const pageSizeSelect = document.getElementById('employeePageSize');
   if (pageSizeSelect && Number(pageSizeSelect.value) !== employeeGridState.pageSize) {
     pageSizeSelect.value = String(employeeGridState.pageSize);
   }
+
   const statusFilterSelect = document.getElementById('employeeStatusFilter');
   if (statusFilterSelect && statusFilterSelect.value !== employeeGridState.statusFilter) {
     statusFilterSelect.value = employeeGridState.statusFilter;
   }
-  const internFilterSelect = document.getElementById('employeeInternFilter');
-  if (internFilterSelect && internFilterSelect.value !== employeeGridState.internFilter) {
-    internFilterSelect.value = employeeGridState.internFilter;
-  }
 
-  const sampleEmployee = normalizedEmps[0] || {};
+  const departmentFilterSelect = document.getElementById('employeeDepartmentFilter');
+
+  const sampleEmployee = employees[0] || {};
   const findKey = (aliases, fallback = '') => {
     return Object.keys(sampleEmployee).find(k => aliases.includes(k.toLowerCase())) || fallback;
   };
 
   const nameKey = findKey(['name', 'employee name'], 'name');
   const statusKey = findKey(['status'], 'status');
-  const roleKey = findKey(['role', 'position']);
-  const titleKey = findKey(['title', 'jobtitle', 'job title']);
-  const emailKey = findKey(['email', 'work email']);
-  const supervisorKey = findKey([
-    'supervisor',
-    'manager',
-    'reportingmanager',
-    'reporting manager',
-    'appraiser',
-    'appariser'
-  ]);
+  const positionKey = findKey(['position', 'role', 'title', 'jobtitle', 'job title']);
   const departmentKey = findKey(['department', 'dept']);
+  const emailKey = findKey(['email', 'work email']);
+  const phoneKey = findKey(['phone', 'phone number', 'contact', 'contactnumber', 'contact number']);
   const joinDateKey = findKey(['joindate', 'joiningdate', 'startdate', 'date of joining']);
+  const notesKey = findKey(['notes', 'note', 'comments']);
   const employeeIdKey = findKey(['employeeid', 'employee_id', 'empid']);
 
   const metric = (id, value) => {
@@ -7087,411 +7306,134 @@ async function loadEmployeesManage() {
     if (el) el.textContent = value;
   };
 
-  const activeCount = normalizedEmps.filter(e => isActiveEmployeeStatus(e[statusKey])).length;
-  const internCount = normalizedEmps.filter(e => normalizeInternFlag(e[internFlagKey])).length;
+  const activeCount = employees.filter(e => isActiveEmployeeStatus(e[statusKey])).length;
   const deptSet = new Set(
-    normalizedEmps
+    employees
       .map(e => (departmentKey ? (e[departmentKey] || 'Unassigned') : null))
       .filter(Boolean)
   );
-  metric('totalEmployeesMetric', normalizedEmps.length);
+
+  metric('totalEmployeesMetric', employees.length);
   metric('activeCountNum', activeCount);
-  metric('internCountMetric', internCount);
+  metric('internCountMetric', employees.filter(e => normalizeInternFlag(e.internFlag || e.internflag)).length);
   metric('departmentCountMetric', deptSet.size);
 
-  const baseHiddenKeys = new Set(['id', 'leavebalances', 'password']);
-  const optionalKeys = Object.keys(sampleEmployee).filter(k => {
-    const lower = k.toLowerCase();
-    return ![
-      nameKey.toLowerCase(),
-      statusKey.toLowerCase(),
-      internFlagKeyNormalized,
-      (titleKey || '').toLowerCase(),
-      (emailKey || '').toLowerCase(),
-      (supervisorKey || '').toLowerCase(),
-      (employeeIdKey || '').toLowerCase(),
-      (departmentKey || '').toLowerCase()
-    ].includes(lower) && !baseHiddenKeys.has(lower);
-  });
-
-  const buildColumns = () => {
-    const cols = [
-      { key: nameKey, label: 'Name', sticky: 'name', sortable: true, width: 220, truncate: true, alwaysVisible: true },
-      { key: statusKey, label: 'Status', sticky: 'status', sortable: true, width: 150, type: 'status', alwaysVisible: true }
-    ];
-    if (titleKey) cols.push({ key: titleKey, label: 'Title', sortable: true, width: 170, type: 'title', truncate: true });
-    cols.push({ key: internFlagKey, label: 'Intern', width: 120, type: 'intern' });
-    if (emailKey) cols.push({ key: emailKey, label: 'Email', width: 220, truncate: true });
-    if (supervisorKey) cols.push({ key: supervisorKey, label: 'Supervisor', width: 200, truncate: true });
-    if (employeeIdKey) cols.push({ key: employeeIdKey, label: 'ID', width: 140, truncate: true });
-    if (departmentKey) cols.push({ key: departmentKey, label: 'Department', sortable: true, width: 160 });
-    optionalKeys.forEach(key => {
-      cols.push({ key, label: key.charAt(0).toUpperCase() + key.slice(1), width: 160, truncate: true });
-    });
-    cols.push({ key: 'actions', label: 'Actions', sticky: 'actions', width: 230, type: 'actions', alwaysVisible: true });
-    return cols;
-  };
-
-  const columns = buildColumns();
-  columns.forEach(col => {
-    if (employeeGridState.columnVisibility[col.key] === undefined) {
-      employeeGridState.columnVisibility[col.key] = true;
+  if (departmentFilterSelect) {
+    const departments = Array.from(deptSet).sort();
+    const options = ['<option value="all">All departments</option>'].concat(
+      departments.map(dept => (
+        `<option value="${escapeHtml(dept)}" ${employeeGridState.departmentFilter === dept ? 'selected' : ''}>${escapeHtml(dept)}</option>`
+      ))
+    );
+    departmentFilterSelect.innerHTML = options.join('');
+    if (departmentFilterSelect.value !== employeeGridState.departmentFilter) {
+      departmentFilterSelect.value = employeeGridState.departmentFilter;
     }
-    if (employeeGridState.columnWidths[col.key] === undefined && col.width) {
-      employeeGridState.columnWidths[col.key] = col.width;
-    }
-  });
-
-  const searchValue = empSearchTerm.trim().toLowerCase();
-  const filtered = normalizedEmps.filter(emp => {
-    const statusValue = String(emp[statusKey] ?? '').toLowerCase();
-    if (employeeGridState.statusFilter !== 'all' && statusValue !== employeeGridState.statusFilter) return false;
-    const isIntern = normalizeInternFlag(emp[internFlagKey]);
-    if (employeeGridState.internFilter === 'intern' && !isIntern) return false;
-    if (employeeGridState.internFilter === 'fte' && isIntern) return false;
-    if (!searchValue) return true;
-    return Object.entries(emp).some(([key, value]) => {
-      if (key.toLowerCase() === 'id') return false;
-      if (value === null || typeof value === 'undefined') return false;
-      if (typeof value === 'object') {
-        try { return JSON.stringify(value).toLowerCase().includes(searchValue); } catch (e) { return false; }
-      }
-      return String(value).toLowerCase().includes(searchValue);
-    });
-  });
-
-  const renderPills = () => {
-    const pillContainer = document.getElementById('dataGridPills');
-    if (!pillContainer) return;
-    const pills = [];
-    if (empSearchTerm.trim()) {
-      pills.push(`<span class="data-grid__pill"><span class="material-symbols-rounded">search</span>${escapeHtml(empSearchTerm.trim())}</span>`);
-    }
-    if (employeeGridState.statusFilter !== 'all') {
-      pills.push(`<span class="data-grid__pill"><span class="material-symbols-rounded">verified</span>Status: ${employeeGridState.statusFilter}</span>`);
-    }
-    if (employeeGridState.internFilter !== 'all') {
-      const label = employeeGridState.internFilter === 'intern' ? 'Interns' : 'Full-time';
-      pills.push(`<span class="data-grid__pill"><span class="material-symbols-rounded">workspace_premium</span>${label}</span>`);
-    }
-    pillContainer.innerHTML = pills.length ? pills.join('') : '<span class="text-muted">No filters applied</span>';
-  };
-
-  if (!employeeGridState.sort.key) {
-    employeeGridState.sort = { key: nameKey, direction: 'asc' };
   }
 
-  const compareValues = (a, b, key) => {
-    const valA = a[key];
-    const valB = b[key];
-    if (typeof valA === 'number' && typeof valB === 'number') return valA - valB;
-    return String(valA ?? '').localeCompare(String(valB ?? ''), undefined, { sensitivity: 'base' });
-  };
-
-  filtered.sort((a, b) => {
-    const { key, direction } = employeeGridState.sort;
-    if (!key || key === 'actions') return 0;
-    const multiplier = direction === 'desc' ? -1 : 1;
-    return compareValues(a, b, key) * multiplier;
+  const filtered = employees.filter(emp => {
+    const search = empSearchTerm.toLowerCase().trim();
+    const name = String(emp[nameKey] || '').toLowerCase();
+    const email = String(emp[emailKey] || '').toLowerCase();
+    const dept = departmentKey ? String(emp[departmentKey] || 'Unassigned') : 'Unassigned';
+    const matchesSearch = !search || name.includes(search) || email.includes(search);
+    const matchesDept = employeeGridState.departmentFilter === 'all' || dept === employeeGridState.departmentFilter;
+    const matchesStatus = employeeGridState.statusFilter === 'all'
+      ? true
+      : employeeGridState.statusFilter === 'active'
+        ? isActiveEmployeeStatus(emp[statusKey])
+        : !isActiveEmployeeStatus(emp[statusKey]);
+    return matchesSearch && matchesDept && matchesStatus;
+  }).sort((a, b) => {
+    const aVal = (a[nameKey] || '').toString().toLowerCase();
+    const bVal = (b[nameKey] || '').toString().toLowerCase();
+    return aVal.localeCompare(bVal);
   });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / employeeGridState.pageSize));
-  if (employeeGridState.page > totalPages) employeeGridState.page = totalPages;
-  const startIdx = (employeeGridState.page - 1) * employeeGridState.pageSize;
-  const pageRows = filtered.slice(startIdx, startIdx + employeeGridState.pageSize);
-
-  const visibleColumns = columns.filter(col => col.alwaysVisible || employeeGridState.columnVisibility[col.key]);
-  const nameWidth = employeeGridState.columnWidths[nameKey] || 220;
-  const tableEl = document.getElementById('empTable');
-  if (tableEl) {
-    tableEl.style.setProperty('--name-col-width', `${nameWidth}px`);
+  if (employeeGridState.page > totalPages) {
+    employeeGridState.page = totalPages;
   }
 
-  const renderValue = (value) => {
-    if (value === null || typeof value === 'undefined') return '';
-    if (typeof value === 'object') return escapeHtml(JSON.stringify(value));
-    return escapeHtml(String(value));
-  };
+  const start = (employeeGridState.page - 1) * employeeGridState.pageSize;
+  const pageRows = filtered.slice(start, start + employeeGridState.pageSize);
 
-  const renderStatusBadge = status => {
-    const normalized = String(status || '').toLowerCase();
-    const active = normalized === 'active';
-    const badgeClass = active ? 'badge--success' : 'badge--neutral';
-    const label = status || 'Unknown';
-    return `<span class="badge ${badgeClass}">${escapeHtml(label)}</span>`;
-  };
+  head.innerHTML = `
+    <tr class="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <th class="px-3 py-3">Employee Name</th>
+      <th class="px-3 py-3">Position</th>
+      <th class="px-3 py-3">Department</th>
+      <th class="px-3 py-3">Email</th>
+      <th class="px-3 py-3">Status</th>
+      <th class="px-3 py-3 text-right">Actions</th>
+    </tr>
+  `;
 
-  const renderTitleBadge = title => {
-    if (!title) return '<span class="text-muted">-</span>';
-    return `<span class="badge badge--info">${escapeHtml(title)}</span>`;
-  };
-
-  const renderHeader = () => {
-    head.innerHTML = '<tr>' + visibleColumns.map(col => {
-      const width = employeeGridState.columnWidths[col.key] || col.width || 160;
-      const stickyClass = col.sticky ? `sticky-${col.sticky}` : '';
-      const sortIcon = employeeGridState.sort.key === col.key
-        ? `<span class="sort-indicator material-symbols-rounded">${employeeGridState.sort.direction === 'asc' ? 'north' : 'south'}</span>`
-        : '';
-      const sortable = col.type !== 'actions' && col.type !== 'intern';
-      const sortAttrs = sortable ? `data-sortable="true" data-sort-key="${col.key}"` : '';
-      return `<th data-col-key="${col.key}" class="${stickyClass}" style="min-width:${width}px;max-width:${width}px;width:${width}px;" ${sortAttrs}>
-        <button type="button" class="sort-button" data-sort-toggle="${col.key}">
-          <span>${escapeHtml(col.label)}</span>${sortIcon}
-        </button>
-        <span class="resize-handle" data-resize="${col.key}"><span></span></span>
-      </th>`;
-    }).join('') + '</tr>';
-  };
-
-  const renderBody = () => {
-    if (!pageRows.length) {
-      body.innerHTML = `<tr><td colspan="${visibleColumns.length}" class="table-empty">No employees match your search.</td></tr>`;
-      return;
-    }
-    body.innerHTML = pageRows.map((emp, idx) => {
-      const rowId = String(emp.id ?? idx);
-      const expanded = employeeGridState.expanded.has(rowId);
-      const cells = visibleColumns.map(col => {
-        const width = employeeGridState.columnWidths[col.key] || col.width || 160;
-        const stickyClass = col.sticky ? `sticky-${col.sticky}` : '';
-        const value = emp[col.key];
-        if (col.type === 'status') {
-          return `<td data-col-key="${col.key}" class="${stickyClass}" style="min-width:${width}px;max-width:${width}px;width:${width}px;">${renderStatusBadge(value)}</td>`;
-        }
-        if (col.type === 'title') {
-          return `<td data-col-key="${col.key}" class="${stickyClass}" style="min-width:${width}px;max-width:${width}px;width:${width}px;">${renderTitleBadge(value)}</td>`;
-        }
-        if (col.type === 'intern') {
-          const isOn = normalizeInternFlag(value);
-          return `<td data-col-key="${col.key}" style="min-width:${width}px;max-width:${width}px;width:${width}px;">
-            <div style="display:flex;align-items:center;gap:10px;">
-              <span class="badge ${isOn ? 'badge--warning' : 'badge--neutral'}">${isOn ? 'Intern' : 'Full-time'}</span>
-              <label class="intern-toggle ${isOn ? 'is-on' : ''}">
-                <input
-                  type="checkbox"
-                  class="intern-flag-toggle sr-only"
-                  data-employee-id="${escapeHtml(String(emp.id ?? ''))}"
-                  ${isOn ? 'checked' : ''}
-                  aria-label="Toggle intern flag for ${escapeHtml(emp[nameKey] ?? 'employee')}"
-                >
-              </label>
-            </div>
-          </td>`;
-        }
-        if (col.type === 'actions') {
-          return `<td data-col-key="${col.key}" class="${stickyClass}" style="min-width:${width}px;max-width:${width}px;width:${width}px;">
-            <div class="table-actions">
-              <button onclick="openEditEmployee('${emp.id}')">Edit</button>
-              <button data-action="toggle" data-id="${emp.id}" class="${emp[statusKey]==='active' ? 'action-danger' : ''}">
-                ${emp[statusKey] === 'active' ? 'Deactivate' : 'Activate'}
-              </button>
-              <button data-action="delete" data-id="${emp.id}" class="action-danger">Delete</button>
-            </div>
-          </td>`;
-        }
-        const content = renderValue(value);
-        const ellipsis = col.truncate ? 'cell-ellipsis' : '';
-        const tooltip = col.truncate ? `title="${content}"` : '';
-        return `<td data-col-key="${col.key}" class="${ellipsis} ${stickyClass}" style="min-width:${width}px;max-width:${width}px;width:${width}px;" ${tooltip}>${content || '<span class="text-muted">-</span>'}</td>`;
-      }).join('');
-
-      const details = [
-        { label: 'Supervisor', value: supervisorKey ? emp[supervisorKey] : '' },
-        { label: 'Join Date', value: joinDateKey ? emp[joinDateKey] : '' },
-        { label: 'Department', value: departmentKey ? emp[departmentKey] : '' },
-        { label: 'Emergency Contact', value: emp.emergencyContact || emp.emergency || '' },
-        { label: 'Email', value: emailKey ? emp[emailKey] : '' }
-      ];
-
+  if (!pageRows.length) {
+    body.innerHTML = '<tr><td colspan="6" class="px-3 py-10 text-center text-sm text-slate-500">No employees match your filters yet.</td></tr>';
+  } else {
+    body.innerHTML = pageRows.map(emp => {
+      const rowId = emp.id ?? emp[employeeIdKey] ?? '';
+      const name = emp[nameKey] || 'Unnamed';
+      const position = emp[positionKey] || '—';
+      const department = departmentKey ? (emp[departmentKey] || 'Unassigned') : 'Unassigned';
+      const email = emailKey ? emp[emailKey] : '';
+      const statusBadge = renderEmployeeStatusPill(emp[statusKey]);
       return `
-        <tr class="data-row" data-row-id="${rowId}">${cells}</tr>
-        <tr class="detail-row ${expanded ? '' : 'hidden'}" data-detail-for="${rowId}">
-          <td colspan="${visibleColumns.length}">
-            <div class="detail-grid">
-              ${details.map(item => `
-                <div class="detail-grid__item">
-                  <p class="detail-grid__label">${escapeHtml(item.label)}</p>
-                  <p class="detail-grid__value">${renderValue(item.value) || '<span class="text-muted">-</span>'}</p>
-                </div>
-              `).join('')}
+        <tr class="align-middle transition hover:bg-slate-50">
+          <td class="whitespace-nowrap px-3 py-4 text-sm font-semibold text-slate-900">${escapeHtml(name)}</td>
+          <td class="px-3 py-4 text-sm text-slate-700">${escapeHtml(position)}</td>
+          <td class="px-3 py-4 text-sm text-slate-700">${escapeHtml(department)}</td>
+          <td class="px-3 py-4 text-sm text-slate-700">${email ? `<a href="mailto:${escapeHtml(email)}" class="text-indigo-600 hover:text-indigo-700">${escapeHtml(email)}</a>` : '<span class="text-slate-400">—</span>'}</td>
+          <td class="px-3 py-4 text-sm">${statusBadge}</td>
+          <td class="px-3 py-4 text-right text-sm">
+            <div class="flex justify-end gap-2">
+              <button data-action="view" data-id="${escapeHtml(String(rowId))}" class="rounded-full bg-slate-100 px-3 py-1 text-slate-700 transition hover:bg-slate-200">
+                <span class="material-symbols-rounded align-middle text-base">visibility</span>
+                View
+              </button>
+              <button data-action="edit" data-id="${escapeHtml(String(rowId))}" class="rounded-full bg-indigo-50 px-3 py-1 text-indigo-700 transition hover:bg-indigo-100">
+                <span class="material-symbols-rounded align-middle text-base">edit</span>
+                Edit
+              </button>
+              <button data-action="toggle" data-id="${escapeHtml(String(rowId))}" class="rounded-full bg-rose-50 px-3 py-1 text-rose-700 transition hover:bg-rose-100">
+                ${isActiveEmployeeStatus(emp[statusKey]) ? 'Deactivate' : 'Activate'}
+              </button>
             </div>
           </td>
-        </tr>`;
+        </tr>
+      `;
     }).join('');
-  };
-
-  const renderPagination = () => {
-    if (!pagination) return;
-    pagination.innerHTML = `
-      <div class="data-grid__pill">
-        <span class="material-symbols-rounded">group</span>
-        ${filtered.length} of ${normalizedEmps.length} employees
-      </div>
-      <div class="pagination-buttons">
-        <button data-page="prev" ${employeeGridState.page === 1 ? 'disabled' : ''}>Prev</button>
-        <span>Page ${employeeGridState.page} / ${totalPages}</span>
-        <button data-page="next" ${employeeGridState.page === totalPages ? 'disabled' : ''}>Next</button>
-      </div>
-    `;
-    pagination.querySelector('[data-page="prev"]')?.addEventListener('click', () => {
-      if (employeeGridState.page > 1) {
-        employeeGridState.page -= 1;
-        loadEmployeesManage();
-      }
-    });
-    pagination.querySelector('[data-page="next"]')?.addEventListener('click', () => {
-      if (employeeGridState.page < totalPages) {
-        employeeGridState.page += 1;
-        loadEmployeesManage();
-      }
-    });
-  };
-
-  const renderColumnToggle = () => {
-    const menu = document.querySelector('#columnTogglePanel .column-visibility__menu');
-    if (!menu) return;
-    menu.innerHTML = columns
-      .filter(col => !col.alwaysVisible)
-      .map(col => {
-        const checked = employeeGridState.columnVisibility[col.key] !== false;
-        return `<label>
-          <input type="checkbox" data-column-toggle="${col.key}" ${checked ? 'checked' : ''}>
-          ${escapeHtml(col.label)}
-        </label>`;
-      }).join('');
-
-    menu.querySelectorAll('input[data-column-toggle]').forEach(input => {
-      input.addEventListener('change', ev => {
-        const key = ev.target.getAttribute('data-column-toggle');
-        employeeGridState.columnVisibility[key] = ev.target.checked;
-        loadEmployeesManage();
-      });
-    });
-  };
-
-  renderPills();
-  renderHeader();
-  renderBody();
-  renderPagination();
-  renderColumnToggle();
-
-  const columnMenu = document.querySelector('#columnTogglePanel .column-visibility__menu');
-  const columnTrigger = document.querySelector('#columnTogglePanel .column-visibility__trigger');
-  if (columnTrigger && columnMenu && !columnTrigger.dataset.bound) {
-    columnTrigger.dataset.bound = 'true';
-    columnTrigger.addEventListener('click', () => columnMenu.classList.toggle('is-open'));
-    document.addEventListener('click', e => {
-      if (!columnMenu.contains(e.target) && !columnTrigger.contains(e.target)) {
-        columnMenu.classList.remove('is-open');
-      }
-    });
   }
 
-  const enableSorting = () => {
-    head.querySelectorAll('[data-sort-toggle]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const key = btn.getAttribute('data-sort-toggle');
-        if (employeeGridState.sort.key === key) {
-          employeeGridState.sort.direction = employeeGridState.sort.direction === 'asc' ? 'desc' : 'asc';
-        } else {
-          employeeGridState.sort = { key, direction: 'asc' };
-        }
-        loadEmployeesManage();
-      });
-    });
-  };
+  const showingStart = filtered.length ? start + 1 : 0;
+  const showingEnd = Math.min(start + employeeGridState.pageSize, filtered.length);
+  pagination.innerHTML = `
+    <div class="text-slate-600">Showing ${showingStart}-${showingEnd} of ${filtered.length} employees</div>
+    <div class="flex items-center gap-3">
+      <button data-page="prev" class="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60" ${employeeGridState.page === 1 ? 'disabled' : ''}>Prev</button>
+      <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">Page ${employeeGridState.page} / ${totalPages}</span>
+      <button data-page="next" class="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60" ${employeeGridState.page === totalPages ? 'disabled' : ''}>Next</button>
+    </div>
+  `;
 
-  const enableResizing = () => {
-    let activeKey = null;
-    let startX = 0;
-    let startWidth = 0;
-
-    const onMove = e => {
-      if (!activeKey) return;
-      const delta = e.pageX - startX;
-      const newWidth = Math.max(120, startWidth + delta);
-      employeeGridState.columnWidths[activeKey] = newWidth;
+  const paginationControls = pagination.querySelectorAll('button[data-page]');
+  paginationControls.forEach(btn => {
+    btn.onclick = () => {
+      if (btn.dataset.page === 'prev' && employeeGridState.page > 1) {
+        employeeGridState.page -= 1;
+      }
+      if (btn.dataset.page === 'next' && employeeGridState.page < totalPages) {
+        employeeGridState.page += 1;
+      }
       loadEmployeesManage();
     };
+  });
 
-    const onUp = () => {
-      activeKey = null;
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    };
-
-    head.querySelectorAll('[data-resize]').forEach(handle => {
-      handle.addEventListener('mousedown', e => {
-        activeKey = handle.getAttribute('data-resize');
-        startX = e.pageX;
-        const th = handle.closest('th');
-        startWidth = th ? th.offsetWidth : 160;
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-      });
-    });
+  employeeManageContext = {
+    employees,
+    keys: { nameKey, statusKey, positionKey, departmentKey, emailKey, phoneKey, joinDateKey, notesKey, employeeIdKey }
   };
-
-  const renderCards = () => {
-    const grid = document.getElementById('employeeCardGrid');
-    if (!grid) return;
-    if (employeeGridState.view !== 'cards') {
-      grid.innerHTML = '';
-      return;
-    }
-    grid.innerHTML = pageRows.map(emp => {
-      const statusBadge = renderStatusBadge(emp[statusKey]);
-      const titleBadge = titleKey ? renderTitleBadge(emp[titleKey]) : '';
-      const supervisor = supervisorKey ? renderValue(emp[supervisorKey]) : '';
-      const email = emailKey ? renderValue(emp[emailKey]) : '';
-      const name = renderValue(emp[nameKey]);
-      return `
-        <article class="employee-card hover-rise">
-          <div class="employee-card__header">
-            <div>
-              <p class="employee-card__name">${name || 'Unnamed'}</p>
-              <p class="employee-card__title">${titleKey ? renderValue(emp[titleKey]) : ''}</p>
-            </div>
-            ${statusBadge}
-          </div>
-          <div class="employee-card__meta">
-            <div>
-              <small>Title</small>
-              <p>${titleBadge || '<span class="text-muted">-</span>'}</p>
-            </div>
-            <div>
-              <small>Email</small>
-              <p class="cell-ellipsis" title="${email}">${email || '<span class="text-muted">-</span>'}</p>
-            </div>
-            <div>
-              <small>Supervisor</small>
-              <p class="cell-ellipsis" title="${supervisor}">${supervisor || '<span class="text-muted">-</span>'}</p>
-            </div>
-            <div>
-              <small>Type</small>
-              <p><span class="badge ${normalizeInternFlag(emp[internFlagKey]) ? 'badge--warning' : 'badge--neutral'}">${normalizeInternFlag(emp[internFlagKey]) ? 'Intern' : 'Full-time'}</span></p>
-            </div>
-            <div>
-              <small>Status</small>
-              <p>${statusBadge}</p>
-            </div>
-          </div>
-        </article>`;
-    }).join('');
-  };
-
-  enableSorting();
-  enableResizing();
-  renderCards();
-
-  if (employeeGridState.view === 'cards') {
-    if (dataGridCard) dataGridCard.classList.add('hidden');
-    if (cardsWrapper) cardsWrapper.classList.remove('hidden');
-  } else {
-    if (dataGridCard) dataGridCard.classList.remove('hidden');
-    if (cardsWrapper) cardsWrapper.classList.add('hidden');
-  }
 }
 
 // Called when edit button is clicked
@@ -7502,63 +7444,34 @@ window.openEditEmployee = async function(empId) {
   openEmpDrawer({title: 'Edit Employee', fields, initial: emp});
 };
 
-async function onInternFlagChange(event) {
-  const checkbox = event.target.closest('.intern-flag-toggle');
-  if (!checkbox) return;
-  const employeeId = checkbox.dataset.employeeId;
-  if (!employeeId) return;
-
-  const isIntern = checkbox.checked;
-  checkbox.disabled = true;
-
-  try {
-    const res = await apiFetch(`/employees/${employeeId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ internFlag: isIntern })
-    });
-    if (!res.ok) {
-      throw new Error(`Failed to update intern flag for employee ${employeeId}`);
-    }
-    showToast(`Intern flag ${isIntern ? 'enabled' : 'disabled'} for this employee.`, 'success');
-  } catch (err) {
-    console.error(err);
-    checkbox.checked = !isIntern;
-    showToast('Unable to update intern flag. Please try again.', 'error');
-  } finally {
-    checkbox.disabled = false;
-  }
-}
-
 // Table actions (toggle, delete)
 async function onEmpTableClick(e) {
-  const interactive = e.target.closest('button, a, input, select, label');
-  const row = e.target.closest('tr.data-row');
-  if (row && !interactive) {
-    const rowId = row.dataset.rowId;
-    if (employeeGridState.expanded.has(rowId)) {
-      employeeGridState.expanded.delete(rowId);
-    } else {
-      employeeGridState.expanded.add(rowId);
-    }
-    const detailRow = document.querySelector(`tr[data-detail-for="${rowId}"]`);
-    if (detailRow) detailRow.classList.toggle('hidden');
-    return;
-  }
-
   const btn = e.target.closest('button[data-action]');
   if (!btn) return;
   const { action, id } = btn.dataset;
 
+  if (!id) return;
+
+  if (action === 'view') {
+    await openEmployeeDrawer(id);
+    return;
+  }
+
+  if (action === 'edit') {
+    await openEditEmployee(id);
+    return;
+  }
+
   if (action === 'toggle') {
-    const emp = (await getJSON('/employees')).find(x => x.id == id);
-    const status = (emp.status === 'active' ? 'inactive' : 'active');
+    const emp = (await getJSON('/employees')).find(x => String(x.id) === String(id));
+    const status = emp && emp.status === 'active' ? 'inactive' : 'active';
     await apiFetch(`/employees/${id}/status`, {
       method:  'PATCH',
       headers: {'Content-Type':'application/json'},
       body:    JSON.stringify({ status })
     });
   }
+
   if (action === 'delete') {
     if (confirm('Are you sure you want to delete this employee?')) {
       await apiFetch(`/employees/${id}`, {
@@ -7566,8 +7479,38 @@ async function onEmpTableClick(e) {
       });
     }
   }
+
   await loadEmployeesManage();
   await loadEmployeesPortal();
+}
+
+async function openEmployeeDrawer(employeeId) {
+  const drawer = document.getElementById('employeeDrawer');
+  const titleEl = document.getElementById('employeeDrawerTitle');
+  const contentEl = document.getElementById('employeeDrawerContent');
+  if (!drawer || !titleEl || !contentEl || !employeeId) return;
+
+  if (!Array.isArray(employeeManageContext.employees) || !employeeManageContext.employees.length) {
+    const emps = await getJSON('/employees');
+    employeeManageContext.employees = Array.isArray(emps) ? emps : [];
+  }
+
+  const keys = employeeManageContext.keys || {};
+  const match = employeeManageContext.employees.find(emp => {
+    const rowId = emp.id ?? (keys.employeeIdKey ? emp[keys.employeeIdKey] : undefined);
+    return String(rowId) === String(employeeId);
+  });
+
+  if (!match) return;
+
+  titleEl.textContent = match[keys.nameKey] || 'Employee details';
+  contentEl.innerHTML = buildEmployeeDrawerContent(match, keys);
+  drawer.classList.remove('hidden');
+}
+
+function closeEmployeeDrawer() {
+  const drawer = document.getElementById('employeeDrawer');
+  if (drawer) drawer.classList.add('hidden');
 }
 
 // ======== LEAVE REPORT LOGIC ========
