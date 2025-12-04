@@ -6,7 +6,10 @@ const { getUploadsRoot, getBrandingUploadDir } = require('./utils/uploadPaths');
 const DEFAULT_BRANDING = {
   name: 'HR Connect',
   tagline: 'Modern, people-first HR experiences',
-  logoPath: ''
+  logoPath: '',
+  logoDataUri: '',
+  logoContentType: '',
+  logoSizeBytes: 0
 };
 
 const BRANDING_CACHE_MS = 60 * 1000;
@@ -21,6 +24,26 @@ function sanitizeLogoPath(rawPath) {
   return '';
 }
 
+function sanitizeLogoDataUri(rawUri) {
+  if (!rawUri || typeof rawUri !== 'string') return '';
+  const trimmed = rawUri.trim();
+  if (!trimmed.startsWith('data:image/')) return '';
+  return trimmed;
+}
+
+function sanitizeLogoContentType(rawType) {
+  if (!rawType || typeof rawType !== 'string') return '';
+  const trimmed = rawType.trim().toLowerCase();
+  if (!trimmed.startsWith('image/')) return '';
+  return trimmed;
+}
+
+function sanitizeLogoSize(rawSize) {
+  const size = Number(rawSize);
+  if (!Number.isFinite(size) || size <= 0) return 0;
+  return Math.round(size);
+}
+
 function normalizeBrandingSettings(raw = {}) {
   const source = raw && typeof raw.value === 'object' ? raw.value : raw;
   const name = typeof source.name === 'string' && source.name.trim()
@@ -30,7 +53,10 @@ function normalizeBrandingSettings(raw = {}) {
     ? source.tagline.trim()
     : DEFAULT_BRANDING.tagline;
   const logoPath = sanitizeLogoPath(source.logoPath);
-  return { name, tagline, logoPath };
+  const logoDataUri = sanitizeLogoDataUri(source.logoDataUri);
+  const logoContentType = sanitizeLogoContentType(source.logoContentType);
+  const logoSizeBytes = sanitizeLogoSize(source.logoSizeBytes);
+  return { name, tagline, logoPath, logoDataUri, logoContentType, logoSizeBytes };
 }
 
 async function loadBrandingSettings({ force = false } = {}) {
