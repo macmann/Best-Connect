@@ -7,9 +7,34 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" />
+  <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="material-theme.css">
   <style>
     /* Employee management layout styles */
+    .nav-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      color: #475569;
+      font-weight: 600;
+      text-align: left;
+      transition: all 0.15s ease;
+    }
+
+    .nav-link:hover {
+      background: #f8fafc;
+      color: #0f172a;
+    }
+
+    .nav-link.active-tab {
+      background: #eef2ff;
+      color: #4338ca;
+      box-shadow: inset 0 0 0 1px #c7d2fe;
+    }
+
     .kpi-grid {
       display: grid;
       gap: 16px;
@@ -1327,109 +1352,141 @@
   </div>
 
   <!-- Main Application -->
-  <div id="mainApp" class="hidden app-container">
-    <header class="top-app-bar">
-      <div class="top-bar-shell">
-        <div class="brand-cluster">
-          <img src="branding-default.svg" alt="HR Connect logo" data-branding-logo>
-          <div class="brand-text">
-            <span class="brand-title" data-branding-title>HR Connect</span>
-            <span class="brand-tagline" data-branding-tagline>Modern, people-first HR experiences</span>
+  <div id="mainApp" class="hidden app-container min-h-screen bg-slate-100">
+    <div class="flex min-h-screen">
+      <div id="sidebarBackdrop" class="fixed inset-0 z-30 bg-slate-900/40 hidden md:hidden" aria-hidden="true"></div>
+
+      <aside
+        id="appSidebar"
+        class="fixed inset-y-0 left-0 z-40 w-72 -translate-x-full transform bg-white shadow-xl transition-transform duration-200 ease-in-out md:static md:translate-x-0 md:shadow-none md:border-r md:border-slate-200"
+      >
+        <div class="flex items-center justify-between px-4 py-4 border-b border-slate-200">
+          <div class="flex items-center gap-3">
+            <img src="branding-default.svg" alt="HR Connect logo" data-branding-logo class="h-10 w-10 rounded-lg bg-slate-50 object-contain p-1">
+            <div class="leading-tight">
+              <p class="text-base font-semibold text-slate-900" data-branding-title>HR Connect</p>
+              <p class="text-xs text-slate-500" data-branding-tagline>Modern, people-first HR experiences</p>
+            </div>
           </div>
-        </div>
-
-        <div class="primary-nav">
-          <div class="primary-tabs" role="tablist" aria-label="Primary navigation">
-            <button id="tabProfile" class="primary-tab hidden" type="button">
-              <span class="material-symbols-rounded">account_circle</span>
-              <span>My Profile</span>
-            </button>
-            <button id="tabPerformance" class="primary-tab" type="button">
-              <span class="material-symbols-rounded">workspace_premium</span>
-              <span>Performance Review</span>
-            </button>
-            <button id="tabPortal" class="primary-tab active-tab" type="button">
-              <span class="material-symbols-rounded">event_available</span>
-              <span>Leave Portal</span>
-            </button>
-          </div>
-
-          <label class="primary-tabs-dropdown" aria-label="Primary navigation dropdown">
-            <span class="material-symbols-rounded">menu</span>
-            <select id="primaryTabSelect">
-              <option value="portal" selected>Leave Portal</option>
-              <option value="performance">Performance Review</option>
-              <option value="profile">My Profile</option>
-            </select>
-          </label>
-        </div>
-
-        <div class="app-actions">
-          <button id="changePassBtn" type="button" class="app-action-btn app-action-btn--ghost hidden">
-            <span class="material-symbols-rounded">key</span>
-            Change Password
-          </button>
-          <button id="logoutBtn" type="button" onclick="logout()" class="app-action-btn app-action-btn--alert hidden">
-            <span class="material-symbols-rounded">logout</span>
-            Logout
+          <button id="mobileNavClose" type="button" class="rounded-full p-2 text-slate-500 hover:bg-slate-100 md:hidden" aria-label="Close navigation">
+            <span class="material-symbols-rounded">close</span>
           </button>
         </div>
-      </div>
-    </header>
 
-    <nav class="tab-bar tab-bar--secondary">
-      <div class="tab-section tab-section--groups">
-        <div class="tab-group" data-tab-group>
-          <button type="button" class="tab-group-toggle" data-tab-group-toggle aria-expanded="false">
-            <span class="material-symbols-rounded">handshake</span>
-            <span class="tab-group-label">Team Operations</span>
-            <span class="material-symbols-rounded tab-group-caret">expand_more</span>
-          </button>
-          <div class="tab-group-menu" data-tab-group-menu>
-            <button id="tabManage" class="tab-button">
-              <span class="material-symbols-rounded">group</span>
-              <span>Employee Management</span>
-            </button>
-            <button id="tabRecruitment" class="tab-button hidden">
-              <span class="material-symbols-rounded">work_history</span>
-              <span>Recruitment</span>
-            </button>
-            <button id="tabManagerApps" class="tab-button hidden">
-              <span class="material-symbols-rounded">inbox</span>
-              <span>Leave Applications</span>
-            </button>
+        <div class="px-4 py-6 space-y-6 text-sm text-slate-700">
+          <div>
+            <p class="px-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">Main</p>
+            <div class="mt-2 space-y-1">
+              <button id="tabPerformance" type="button" class="nav-link" aria-label="Dashboard">
+                <span class="material-symbols-rounded">home</span>
+                <span class="truncate">Dashboard</span>
+              </button>
+              <button id="tabManage" type="button" class="nav-link">
+                <span class="material-symbols-rounded">group</span>
+                <span class="truncate">Employees</span>
+              </button>
+              <button id="tabRecruitment" type="button" class="nav-link hidden">
+                <span class="material-symbols-rounded">work_history</span>
+                <span class="truncate">Recruitment</span>
+              </button>
+              <button id="tabPortal" type="button" class="nav-link active-tab">
+                <span class="material-symbols-rounded">event_available</span>
+                <span class="truncate">Leave</span>
+              </button>
+              <button id="tabSettings" type="button" class="nav-link hidden">
+                <span class="material-symbols-rounded">settings</span>
+                <span class="truncate">Settings</span>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <p class="px-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">Workflows</p>
+            <div class="mt-2 space-y-1">
+              <button id="tabManagerApps" type="button" class="nav-link hidden">
+                <span class="material-symbols-rounded">inbox</span>
+                <span class="truncate">Leave Applications</span>
+              </button>
+              <button id="tabLeaveReport" type="button" class="nav-link hidden">
+                <span class="material-symbols-rounded">monitoring</span>
+                <span class="truncate">Leave Report</span>
+              </button>
+              <button id="tabLocationInsights" type="button" class="nav-link hidden">
+                <span class="material-symbols-rounded">public</span>
+                <span class="truncate">Location Insights</span>
+              </button>
+              <button id="tabFinance" type="button" class="nav-link hidden">
+                <span class="material-symbols-rounded">account_balance</span>
+                <span class="truncate">Finance</span>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <p class="px-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">My workspace</p>
+            <div class="mt-2 space-y-1">
+              <label class="nav-link justify-between" aria-label="Primary navigation dropdown">
+                <div class="flex items-center gap-3 text-slate-500">
+                  <span class="material-symbols-rounded">menu</span>
+                  <span class="truncate">Switch area</span>
+                </div>
+                <select id="primaryTabSelect" class="ml-auto w-32 bg-transparent text-sm text-slate-600 focus:outline-none">
+                  <option value="portal" selected>Leave</option>
+                  <option value="performance">Dashboard</option>
+                  <option value="profile">Profile</option>
+                </select>
+              </label>
+            </div>
           </div>
         </div>
+      </aside>
 
-        <div class="tab-group" data-tab-group>
-          <button type="button" class="tab-group-toggle" data-tab-group-toggle aria-expanded="false">
-            <span class="material-symbols-rounded">insights</span>
-            <span class="tab-group-label">Insights &amp; Admin</span>
-            <span class="material-symbols-rounded tab-group-caret">expand_more</span>
-          </button>
-          <div class="tab-group-menu" data-tab-group-menu>
-            <button id="tabLeaveReport" class="tab-button hidden">
-              <span class="material-symbols-rounded">monitoring</span>
-              <span>Leave Report</span>
-            </button>
-            <button id="tabLocationInsights" class="tab-button hidden">
-              <span class="material-symbols-rounded">public</span>
-              <span>Location Insights</span>
-            </button>
-            <button id="tabSettings" class="tab-button hidden">
-              <span class="material-symbols-rounded">settings</span>
-              <span>Settings</span>
-            </button>
-            <button id="tabFinance" class="tab-button hidden">
-              <span class="material-symbols-rounded">account_balance</span>
-              <span>Finance</span>
-            </button>
+      <div class="flex min-h-screen flex-1 flex-col md:pl-72">
+        <header class="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
+          <div class="flex items-center justify-between px-4 py-3 md:px-8">
+            <div class="flex items-center gap-3">
+              <button id="mobileNavToggle" type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-600 shadow-sm md:hidden" aria-label="Open navigation">
+                <span class="material-symbols-rounded">menu</span>
+              </button>
+              <div class="flex items-center gap-3">
+                <img src="branding-default.svg" alt="HR Connect logo" data-branding-logo class="hidden h-10 w-10 rounded-lg bg-slate-50 object-contain p-1 md:block">
+                <div class="leading-tight">
+                  <p class="text-sm font-semibold text-slate-900" data-branding-title>HR Connect</p>
+                  <p class="text-xs text-slate-500" data-branding-tagline>Modern, people-first HR experiences</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="relative">
+              <button id="userMenuButton" type="button" class="flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-200 hover:bg-slate-200">
+                <span class="material-symbols-rounded text-lg">account_circle</span>
+                <span class="hidden sm:inline">Account</span>
+                <span class="material-symbols-rounded text-base text-slate-500">expand_more</span>
+              </button>
+              <div id="userMenu" class="absolute right-0 mt-2 w-56 origin-top-right divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white text-sm shadow-xl hidden">
+                <div class="py-1">
+                  <button id="tabProfile" type="button" class="hidden flex w-full items-center gap-2 px-4 py-2 text-left text-slate-700 hover:bg-slate-50">
+                    <span class="material-symbols-rounded text-base">account_circle</span>
+                    <span>My Profile</span>
+                  </button>
+                  <button id="changePassBtn" type="button" class="hidden flex w-full items-center gap-2 px-4 py-2 text-left text-slate-700 hover:bg-slate-50">
+                    <span class="material-symbols-rounded text-base">key</span>
+                    <span>Change Password</span>
+                  </button>
+                </div>
+                <div class="py-1">
+                  <button id="logoutBtn" type="button" onclick="logout()" class="hidden flex w-full items-center gap-2 px-4 py-2 text-left text-red-600 hover:bg-red-50">
+                    <span class="material-symbols-rounded text-base">logout</span>
+                    <span>Logout</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
-    </nav>
+        </header>
 
-    <main class="content-area">
+        <main class="flex-1 bg-slate-50">
+          <div class="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8 space-y-8">
       <!-- Employee Profile Panel -->
       <section id="profilePanel" class="panel hidden">
         <div class="panel-header">
@@ -1520,248 +1577,100 @@
 
       <!-- Performance Review Panel -->
       <section id="performancePanel" class="panel hidden">
-        <div class="panel-header">
-          <h2 class="panel-title">
-            <span class="material-symbols-rounded">workspace_premium</span>
-            Performance Review
-          </h2>
-          <p class="panel-subtitle">Plan, monitor, calibrate, and grow through a full annual performance cycle.</p>
-        </div>
-
-        <div class="performance-summary">
-          <div class="md-chip" id="performanceRoleChip">
-            <span class="material-symbols-rounded">verified</span>
-            <span>Role: Employee</span>
+        <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div class="space-y-1">
+            <p class="text-sm font-semibold uppercase tracking-[0.08em] text-indigo-600">Dashboard</p>
+            <h2 class="flex items-center gap-2 text-2xl font-bold text-slate-900">
+              <span class="material-symbols-rounded text-3xl text-indigo-600">dashboard</span>
+              People &amp; HR Overview
+            </h2>
+            <p class="text-slate-600">Stay ahead with a quick snapshot of headcount, hiring, and time-off activity.</p>
           </div>
-          <div class="md-chip" id="performanceCycleChip">
-            <span class="material-symbols-rounded">calendar_month</span>
-            <span>Cycle: -</span>
-          </div>
-          <div class="md-chip" id="performanceUpdatedChip">
-            <span class="material-symbols-rounded">update</span>
-            <span>Updated: -</span>
+          <div class="flex items-center gap-3 text-sm text-slate-500">
+            <span class="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 shadow-sm ring-1 ring-slate-200">
+              <span class="material-symbols-rounded text-base text-emerald-500">verified_user</span>
+              Live tenant data
+            </span>
+            <span class="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 shadow-sm ring-1 ring-slate-200">
+              <span class="material-symbols-rounded text-base text-sky-500">schedule</span>
+              Refreshes automatically
+            </span>
           </div>
         </div>
 
-        <div class="performance-grid">
-          <div class="md-card performance-card">
-            <div class="card-title">
-              <span class="material-symbols-rounded">flag</span>
-              Goals &amp; OKRs
+        <div id="dashboardStatGrid" class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div class="flex items-center justify-between">
+              <div class="space-y-1">
+                <p class="text-sm font-medium text-slate-500">Total employees</p>
+                <p id="totalEmployeesStat" class="text-3xl font-bold text-slate-900">--</p>
+              </div>
+              <span class="material-symbols-rounded rounded-xl bg-indigo-50 p-3 text-indigo-600">group</span>
             </div>
-            <p class="card-subtitle">Create weighted goals, submit for manager approval, and track alignment.</p>
-            <div class="md-field">
-              <label class="md-label" for="performanceEmployeeSelect">Employee</label>
-              <div class="md-input-wrapper">
-                <span class="material-symbols-rounded">person</span>
-                <select id="performanceEmployeeSelect" class="md-select"></select>
-              </div>
-            </div>
-            <form id="performanceGoalForm" class="performance-form">
-              <div class="form-row">
-                <label class="md-label" for="goalTitle">Goal / OKR</label>
-                <input id="goalTitle" type="text" class="md-input" placeholder="Ship onboarding revamp" required />
-              </div>
-              <div class="form-row two-col">
-                <div>
-                  <label class="md-label" for="goalWeight">Weight (%)</label>
-                  <input id="goalWeight" type="number" min="1" max="100" class="md-input" placeholder="30" />
-                </div>
-                <div>
-                  <label class="md-label" for="goalDue">Target Date</label>
-                  <input id="goalDue" type="date" class="md-input" />
-                </div>
-              </div>
-              <div class="form-row">
-                <label class="md-label" for="goalDescription">Success Criteria</label>
-                <textarea id="goalDescription" class="md-textarea" rows="2" placeholder="Launch to 100% of customers with CSAT &gt; 4.5"></textarea>
-              </div>
-              <div class="form-actions">
-                <button type="submit" class="md-button">
-                  <span class="material-symbols-rounded">add_task</span>
-                  Save goal
-                </button>
-                <span class="helper-text">Goals remain editable until approved by a manager.</span>
-              </div>
-            </form>
-            <div id="performanceGoalList" class="performance-list"></div>
+            <p class="mt-3 text-sm text-slate-500">Active and inactive workers in your tenant.</p>
           </div>
-
-          <div class="md-card performance-card">
-            <div class="card-title">
-              <span class="material-symbols-rounded">chat</span>
-              Recurring Check-ins
+          <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div class="flex items-center justify-between">
+              <div class="space-y-1">
+                <p class="text-sm font-medium text-slate-500">New hires this month</p>
+                <p id="newHiresStat" class="text-3xl font-bold text-slate-900">--</p>
+              </div>
+              <span class="material-symbols-rounded rounded-xl bg-emerald-50 p-3 text-emerald-600">sparkles</span>
             </div>
-            <p class="card-subtitle">Capture progress, nudge reminders, and flag escalations early.</p>
-            <form id="checkInForm" class="performance-form">
-              <div class="form-row">
-                <label class="md-label" for="checkInNotes">Update</label>
-                <textarea id="checkInNotes" class="md-textarea" rows="2" placeholder="Progress, blockers, and asks" required></textarea>
+            <p class="mt-3 text-sm text-slate-500">Based on start dates in the current month.</p>
+          </div>
+          <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div class="flex items-center justify-between">
+              <div class="space-y-1">
+                <p class="text-sm font-medium text-slate-500">Open positions</p>
+                <p id="openPositionsStat" class="text-3xl font-bold text-slate-900">--</p>
               </div>
-              <div class="form-row two-col">
-                <div>
-                  <label class="md-label" for="checkInType">Check-in Type</label>
-                  <select id="checkInType" class="md-select">
-                    <option value="status">Status</option>
-                    <option value="reminder">Reminder</option>
-                    <option value="escalation">Escalation</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="md-label" for="checkInDate">Next touchpoint</label>
-                  <input id="checkInDate" type="date" class="md-input" />
-                </div>
+              <span class="material-symbols-rounded rounded-xl bg-amber-50 p-3 text-amber-600">work_history</span>
+            </div>
+            <p class="mt-3 text-sm text-slate-500">Roles accepting candidates right now.</p>
+          </div>
+          <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div class="flex items-center justify-between">
+              <div class="space-y-1">
+                <p class="text-sm font-medium text-slate-500">Pending leave requests</p>
+                <p id="pendingLeaveStat" class="text-3xl font-bold text-slate-900">--</p>
               </div>
-              <label class="md-checkbox">
-                <input type="checkbox" id="checkInEscalate" />
-                <span>Notify manager and HR for escalations</span>
-              </label>
-              <div class="form-actions">
-                <button type="submit" class="md-button">
-                  <span class="material-symbols-rounded">event_available</span>
-                  Log check-in
-                </button>
-              </div>
-            </form>
-            <div id="checkInList" class="performance-list"></div>
+              <span class="material-symbols-rounded rounded-xl bg-rose-50 p-3 text-rose-600">pending_actions</span>
+            </div>
+            <p class="mt-3 text-sm text-slate-500">Waiting for manager approval.</p>
           </div>
         </div>
 
-        <div class="performance-grid">
-          <div class="md-card performance-card">
-            <div class="card-title">
-              <span class="material-symbols-rounded">hourglass_top</span>
-              Mid-year Assessment
-            </div>
-            <p class="card-subtitle">Self-reflect with evidence uploads, plus interim manager ratings.</p>
-            <form id="midYearForm" class="performance-form">
-              <div class="form-row">
-                <label class="md-label" for="midYearSelf">Self-assessment</label>
-                <textarea id="midYearSelf" class="md-textarea" rows="3" placeholder="Impact, learnings, and support needed"></textarea>
-              </div>
-              <div class="form-row two-col">
+        <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <div class="xl:col-span-2">
+            <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div class="flex items-center justify-between">
                 <div>
-                  <label class="md-label" for="midYearRating">Interim manager rating</label>
-                  <select id="midYearRating" class="md-select">
-                    <option value="">-- select --</option>
-                    <option value="exceeds">Exceeds expectations</option>
-                    <option value="meets">Meets expectations</option>
-                    <option value="developing">Developing</option>
-                  </select>
+                  <p class="text-sm font-semibold uppercase tracking-[0.08em] text-slate-500">Recruitment</p>
+                  <h3 class="text-lg font-bold text-slate-900">Upcoming interviews</h3>
+                  <p class="text-sm text-slate-500">Next 5 interviews on the calendar.</p>
                 </div>
-                <div>
-                  <label class="md-label" for="midYearEvidence">Evidence</label>
-                  <input id="midYearEvidence" type="file" class="md-input" multiple />
-                </div>
+                <span class="material-symbols-rounded rounded-xl bg-sky-50 p-3 text-sky-600">event_upcoming</span>
               </div>
-              <div class="form-actions">
-                <button type="submit" class="md-button">
-                  <span class="material-symbols-rounded">save</span>
-                  Save mid-year package
-                </button>
+              <div id="upcomingInterviewsList" class="mt-4 divide-y divide-slate-100">
+                <div class="py-3 text-sm text-slate-500">Loading upcoming interviews...</div>
               </div>
-            </form>
-            <div id="midYearEvidenceList" class="performance-chips"></div>
-          </div>
-
-          <div class="md-card performance-card">
-            <div class="card-title">
-              <span class="material-symbols-rounded">grade</span>
-              Year-end Reviews
-            </div>
-            <p class="card-subtitle">Capture self/manager reviews, competency ratings, and weighted scoring.</p>
-            <form id="yearEndForm" class="performance-form">
-              <div class="form-row">
-                <label class="md-label" for="yearEndSelf">Self-review</label>
-                <textarea id="yearEndSelf" class="md-textarea" rows="2"></textarea>
-              </div>
-              <div class="form-row">
-                <label class="md-label" for="yearEndManager">Manager notes</label>
-                <textarea id="yearEndManager" class="md-textarea" rows="2" placeholder="Calibration-friendly notes"></textarea>
-              </div>
-              <div id="yearEndGoals" class="performance-list"></div>
-              <div id="yearEndCompetencies" class="performance-list"></div>
-              <div class="score-row">
-                <div>
-                  <p class="label">Weighted Score</p>
-                  <p id="yearEndScore" class="score-value">-</p>
-                </div>
-                <button type="submit" class="md-button">
-                  <span class="material-symbols-rounded">check_circle</span>
-                  Save review &amp; scores
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-
-        <div class="performance-grid">
-          <div class="md-card performance-card">
-            <div class="card-title">
-              <span class="material-symbols-rounded">gavel</span>
-              HR Calibration
-            </div>
-            <p class="card-subtitle">Lock or unlock ratings, apply calibration adjustments, and visualize distribution.</p>
-            <div class="calibration-row">
-              <div>
-                <p class="label">Calibration lock</p>
-                <p class="text-muted">Only HR can toggle locks. Managers can view status.</p>
-              </div>
-              <button id="calibrationToggle" class="md-button md-button--outlined" type="button">
-                <span class="material-symbols-rounded">lock_open</span>
-                <span>Unlock</span>
-              </button>
-            </div>
-            <div class="form-row two-col">
-              <div>
-                <label class="md-label" for="calibrationAdjustments">Rating adjustments</label>
-                <textarea id="calibrationAdjustments" class="md-textarea" rows="2" placeholder="Example: Move Goal 1 to 4.2 after calibration"></textarea>
-              </div>
-              <div>
-                <label class="md-label">Distribution</label>
-                <div id="calibrationDistribution" class="distribution"></div>
-              </div>
-            </div>
-            <div class="form-actions">
-              <button id="calibrationSave" type="button" class="md-button">
-                <span class="material-symbols-rounded">stacked_bar_chart</span>
-                Save calibration
-              </button>
             </div>
           </div>
-
-          <div class="md-card performance-card">
-            <div class="card-title">
-              <span class="material-symbols-rounded">trending_up</span>
-              Development Plan
+          <div>
+            <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm font-semibold uppercase tracking-[0.08em] text-slate-500">Time off</p>
+                  <h3 class="text-lg font-bold text-slate-900">Upcoming leaves</h3>
+                  <p class="text-sm text-slate-500">Today and the next 7 days.</p>
+                </div>
+                <span class="material-symbols-rounded rounded-xl bg-indigo-50 p-3 text-indigo-600">calendar_month</span>
+              </div>
+              <div id="upcomingLeavesList" class="mt-4 divide-y divide-slate-100">
+                <div class="py-3 text-sm text-slate-500">Loading leave calendar...</div>
+              </div>
             </div>
-            <p class="card-subtitle">Capture growth actions, training recommendations, and follow-up tasks.</p>
-            <form id="developmentForm" class="performance-form">
-              <div class="form-row">
-                <label class="md-label" for="developmentSummary">Plan summary</label>
-                <textarea id="developmentSummary" class="md-textarea" rows="2" placeholder="Growth focus areas, timelines, and support"></textarea>
-              </div>
-              <div class="form-row two-col">
-                <div>
-                  <label class="md-label" for="trainingInput">Training recommendations</label>
-                  <input id="trainingInput" type="text" class="md-input" placeholder="e.g., Leadership Foundations" />
-                  <button id="addTraining" type="button" class="md-button md-button--outlined">Add training</button>
-                  <div id="trainingList" class="performance-chips"></div>
-                </div>
-                <div>
-                  <label class="md-label" for="followUpInput">Follow-up tasks</label>
-                  <input id="followUpInput" type="text" class="md-input" placeholder="e.g., Shadow QBR with manager" />
-                  <button id="addFollowUp" type="button" class="md-button md-button--outlined">Add task</button>
-                  <div id="followUpList" class="performance-chips"></div>
-                </div>
-              </div>
-              <div class="form-actions">
-                <button type="submit" class="md-button">
-                  <span class="material-symbols-rounded">task_alt</span>
-                  Save development plan
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       </section>
@@ -2041,104 +1950,124 @@
           </div>
         </div>
 
-        <div class="action-bar card-elevated">
-          <div class="action-bar__primary">
-            <button id="csvUploadBtn" class="md-button md-button--outlined">
-              <span class="material-symbols-rounded">cloud_upload</span>
-              Upload Employees CSV
-            </button>
-            <button id="leaveCsvUploadBtn" class="md-button md-button--outlined">
-              <span class="material-symbols-rounded">event_available</span>
-              Upload Leave CSV
-            </button>
-            <button id="addEmployeeBtn" class="md-button md-button--filled">
-              <span class="material-symbols-rounded">person_add</span>
-              Add Employee
-            </button>
-            <input id="csvInput" type="file" accept=".csv" class="hidden">
-            <input id="leaveCsvInput" type="file" accept=".csv" class="hidden">
-          </div>
-          <div class="action-bar__secondary">
-            <div class="view-toggle" role="group" aria-label="Toggle employee view">
-              <button id="tableViewBtn" class="view-toggle__btn view-toggle__btn--active" type="button">
-                <span class="material-symbols-rounded">table</span>
-                Table View
-              </button>
-              <button id="cardViewBtn" class="view-toggle__btn" type="button">
-                <span class="material-symbols-rounded">view_agenda</span>
-                Card View
-              </button>
+        <div class="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div class="space-y-1">
+              <p class="text-sm font-semibold text-slate-700">Employee tools</p>
+              <p class="text-sm text-slate-500">Import rosters, manage leave balances, and add people quickly.</p>
             </div>
-            <div class="filter-group">
-              <label class="filter-label" for="employeeStatusFilter">Filters</label>
-              <div class="filter-controls">
-                <select id="employeeStatusFilter" class="md-select filter-select">
-                  <option value="all">All Statuses</option>
+            <div class="flex flex-wrap gap-3">
+              <button id="csvUploadBtn" class="md-button md-button--outlined">
+                <span class="material-symbols-rounded">cloud_upload</span>
+                Upload Employees CSV
+              </button>
+              <button id="leaveCsvUploadBtn" class="md-button md-button--outlined">
+                <span class="material-symbols-rounded">event_available</span>
+                Upload Leave CSV
+              </button>
+              <button id="addEmployeeBtn" class="md-button md-button--filled">
+                <span class="material-symbols-rounded">person_add</span>
+                Add Employee
+              </button>
+              <input id="csvInput" type="file" accept=".csv" class="hidden">
+              <input id="leaveCsvInput" type="file" accept=".csv" class="hidden">
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-end">
+            <div class="w-full lg:max-w-sm">
+              <label class="text-xs font-semibold uppercase tracking-wide text-slate-500" for="empSearchInput">Search</label>
+              <div class="relative mt-2">
+                <span class="pointer-events-none absolute left-3 top-2.5 text-slate-400">🔍</span>
+                <input
+                  id="empSearchInput"
+                  type="text"
+                  placeholder="Search by name or email"
+                  autocomplete="off"
+                  spellcheck="false"
+                  class="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm text-slate-800 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+                >
+              </div>
+            </div>
+            <div class="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div class="space-y-2">
+                <label class="text-xs font-semibold uppercase tracking-wide text-slate-500" for="employeeDepartmentFilter">Department</label>
+                <select
+                  id="employeeDepartmentFilter"
+                  class="w-full rounded-xl border border-slate-200 bg-white py-2.5 px-3 text-sm font-medium text-slate-800 shadow-sm focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+                >
+                  <option value="all">All departments</option>
+                </select>
+              </div>
+              <div class="space-y-2">
+                <label class="text-xs font-semibold uppercase tracking-wide text-slate-500" for="employeeStatusFilter">Status</label>
+                <select
+                  id="employeeStatusFilter"
+                  class="w-full rounded-xl border border-slate-200 bg-white py-2.5 px-3 text-sm font-medium text-slate-800 shadow-sm focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+                >
+                  <option value="all">All statuses</option>
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
                 </select>
-                <select id="employeeInternFilter" class="md-select filter-select">
-                  <option value="all">All Types</option>
-                  <option value="intern">Interns</option>
-                  <option value="fte">Full-time</option>
+              </div>
+              <div class="space-y-2">
+                <label class="text-xs font-semibold uppercase tracking-wide text-slate-500" for="employeePageSize">Rows</label>
+                <select
+                  id="employeePageSize"
+                  class="w-full rounded-xl border border-slate-200 bg-white py-2.5 px-3 text-sm font-medium text-slate-800 shadow-sm focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+                >
+                  <option value="5">5 rows</option>
+                  <option value="8" selected>8 rows</option>
+                  <option value="12">12 rows</option>
+                  <option value="20">20 rows</option>
                 </select>
               </div>
             </div>
-            <div class="search-bar">
-              <label class="filter-label" for="empSearchInput">Search</label>
-              <div class="search-input">
-                <span class="material-symbols-rounded">search</span>
-                <input id="empSearchInput" type="text" placeholder="Search name, title, department..." autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+
+        <div class="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div class="flex flex-col gap-1 border-b border-slate-200 px-4 py-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Employee directory</p>
+              <h3 class="text-lg font-semibold text-slate-900">People overview</h3>
+            </div>
+            <p class="text-sm text-slate-500">Quickly scan the roster then open details in a side panel.</p>
+          </div>
+          <div class="overflow-x-auto">
+            <table id="empTable" class="min-w-full divide-y divide-slate-200">
+              <thead id="empTableHead" class="bg-slate-50"></thead>
+              <tbody id="empTableBody" class="divide-y divide-slate-200 bg-white"></tbody>
+            </table>
+          </div>
+          <div id="empPagination" class="flex flex-col gap-3 border-t border-slate-200 px-4 py-4 text-sm text-slate-700 md:flex-row md:items-center md:justify-between"></div>
+        </div>
+
+        <div
+          id="employeeDrawer"
+          class="fixed inset-0 z-40 hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Employee details drawer"
+        >
+          <div id="employeeDrawerOverlay" class="absolute inset-0 bg-slate-900/40 transition-opacity"></div>
+          <aside class="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col bg-white shadow-2xl ring-1 ring-slate-200">
+            <div class="flex items-start justify-between border-b border-slate-200 px-6 py-4">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Employee details</p>
+                <h3 id="employeeDrawerTitle" class="text-lg font-semibold text-slate-900"></h3>
               </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="md-card card-elevated data-grid-card">
-          <div class="data-grid__header">
-            <div>
-              <p class="data-grid__eyebrow">Employee directory</p>
-              <h3 class="data-grid__title">Responsive DataGrid</h3>
-            </div>
-            <div class="column-visibility" id="columnTogglePanel">
-              <button type="button" class="md-button md-button--text column-visibility__trigger">
-                <span class="material-symbols-rounded">view_column</span>
-                Columns
+              <button
+                id="employeeDrawerClose"
+                type="button"
+                class="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                aria-label="Close employee details"
+              >
+                <span class="material-symbols-rounded">close</span>
               </button>
-              <div class="column-visibility__menu" aria-label="Toggle columns"></div>
             </div>
-          </div>
-          <div class="data-grid__toolbar">
-            <div class="chip-group" id="dataGridPills"></div>
-            <div class="data-grid__controls">
-              <label class="sr-only" for="employeePageSize">Rows per page</label>
-              <select id="employeePageSize" class="md-select data-grid__select">
-                <option value="5">5 rows</option>
-                <option value="8" selected>8 rows</option>
-                <option value="12">12 rows</option>
-                <option value="20">20 rows</option>
-              </select>
-            </div>
-          </div>
-          <div class="data-grid__surface">
-            <div class="data-grid__scroll">
-              <table id="empTable" class="data-grid-table">
-                <thead id="empTableHead"></thead>
-                <tbody id="empTableBody"></tbody>
-              </table>
-            </div>
-            <div id="empPagination" class="data-grid__pagination"></div>
-          </div>
-        </div>
-
-        <div id="employeeCardWrapper" class="md-card card-elevated employee-card-wrapper hidden">
-          <div class="data-grid__header">
-            <div>
-              <p class="data-grid__eyebrow">Responsive cards</p>
-              <h3 class="data-grid__title">Mobile-first Employee Cards</h3>
-            </div>
-          </div>
-          <div id="employeeCardGrid" class="employee-card-grid"></div>
+            <div id="employeeDrawerContent" class="scrollbar-thin flex-1 space-y-6 overflow-y-auto px-6 py-5 text-sm text-slate-700"></div>
+          </aside>
         </div>
 
         <div
@@ -3255,12 +3184,45 @@
           </div>
         </section>
       </section>
-    </main>
+          </div>
+        </main>
+      </div>
+    </div>
   </div>
 
   <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
   <script>
+    const sidebar = document.getElementById('appSidebar');
+    const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+    const mobileNavToggle = document.getElementById('mobileNavToggle');
+    const mobileNavClose = document.getElementById('mobileNavClose');
+    const userMenuButton = document.getElementById('userMenuButton');
+    const userMenu = document.getElementById('userMenu');
+
+    function setSidebarOpen(isOpen) {
+      if (!sidebar || !sidebarBackdrop) return;
+      sidebar.classList.toggle('-translate-x-full', !isOpen);
+      sidebarBackdrop.classList.toggle('hidden', !isOpen);
+    }
+
+    if (mobileNavToggle) mobileNavToggle.addEventListener('click', () => setSidebarOpen(true));
+    if (mobileNavClose) mobileNavClose.addEventListener('click', () => setSidebarOpen(false));
+    if (sidebarBackdrop) sidebarBackdrop.addEventListener('click', () => setSidebarOpen(false));
+
+    if (userMenuButton && userMenu) {
+      userMenuButton.addEventListener('click', event => {
+        event.stopPropagation();
+        userMenu.classList.toggle('hidden');
+      });
+
+      document.addEventListener('click', event => {
+        if (!userMenu.contains(event.target) && !userMenuButton.contains(event.target)) {
+          userMenu.classList.add('hidden');
+        }
+      });
+    }
+
     function toggleHalfDayPeriod() {
       const checkbox = document.getElementById('halfDay');
       const period = document.getElementById('halfDayPeriod');
