@@ -38,7 +38,10 @@ const LOCATION_COLORS = ['#6366f1', '#22c55e', '#06b6d4', '#f97316', '#a855f7', 
 const DEFAULT_BRANDING = {
   name: 'HR Connect',
   tagline: 'Modern, people-first HR experiences',
-  logoPath: ''
+  logoPath: '',
+  logoDataUri: '',
+  logoContentType: '',
+  logoSizeBytes: 0
 };
 let brandingSettings = { ...DEFAULT_BRANDING };
 let brandingLoaded = false;
@@ -3395,6 +3398,10 @@ async function onEmailSettingsSubmit(ev) {
 }
 
 function getBrandingLogoUrl(settings = brandingSettings) {
+  const logoDataUri = settings.logoDataUri && typeof settings.logoDataUri === 'string'
+    ? settings.logoDataUri.trim()
+    : '';
+  if (logoDataUri) return logoDataUri;
   const logo = settings.logoPath && typeof settings.logoPath === 'string' ? settings.logoPath.trim() : '';
   if (!logo) return 'branding-default.svg';
   return logo.startsWith('/') ? logo : `/${logo}`;
@@ -3464,9 +3471,10 @@ function renderBrandingForm() {
   }
   const help = document.getElementById('brandingHelp');
   if (help) {
-    help.textContent = brandingSettings.logoPath
-      ? 'A logo is currently in use. Upload a new file to replace it or check remove to clear it.'
-      : 'PNG, JPG, SVG, or WebP up to 2 MB.';
+    const hasLogo = Boolean(brandingSettings.logoPath || brandingSettings.logoDataUri);
+    help.textContent = hasLogo
+      ? 'A logo is currently in use. Upload a new 512x512px image to replace it or check remove to clear it.'
+      : 'PNG, JPG, SVG, or WebP up to 2 MB. Best results with a 512x512px image and transparent background.';
   }
   applyBranding(brandingSettings);
 }

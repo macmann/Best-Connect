@@ -3744,13 +3744,36 @@ init().then(async () => {
         const shouldRemoveLogo = payload.removeLogo === 'true' || payload.removeLogo === true;
 
         let logoPath = existing.logoPath || '';
+        let logoDataUri = existing.logoDataUri || '';
+        let logoContentType = existing.logoContentType || '';
+        let logoSizeBytes = existing.logoSizeBytes || 0;
         if (req.file) {
           logoPath = `/uploads/branding/${req.file.filename}`;
+          try {
+            const buffer = fs.readFileSync(req.file.path);
+            const base64 = buffer.toString('base64');
+            const mime = req.file.mimetype || 'image/png';
+            logoDataUri = `data:${mime};base64,${base64}`;
+            logoContentType = mime;
+            logoSizeBytes = req.file.size || buffer.length || 0;
+          } catch (fileErr) {
+            console.error('Failed to read uploaded branding logo', fileErr);
+          }
         } else if (shouldRemoveLogo) {
           logoPath = '';
+          logoDataUri = '';
+          logoContentType = '';
+          logoSizeBytes = 0;
         }
 
-        const saved = await saveBrandingSettings({ name: normalizedName, tagline: normalizedTagline, logoPath });
+        const saved = await saveBrandingSettings({
+          name: normalizedName,
+          tagline: normalizedTagline,
+          logoPath,
+          logoDataUri,
+          logoContentType,
+          logoSizeBytes
+        });
 
         if (req.file && existing.logoPath && existing.logoPath !== saved.logoPath) {
           removeLogoFile(existing.logoPath);
