@@ -593,8 +593,18 @@ const DEFAULT_LEAVE_EMAIL_TEMPLATES = {
   requestBody: '{name} applied for {type} leave from {from} to {to}.',
   approveSubject: 'Leave approved',
   approveBody: '{name}, your leave from {from} to {to} has been approved.',
-  rejectSubject: 'Leave rejected',
-  rejectBody: '{name}, your leave from {from} to {to} has been rejected.',
+  rejectSubject: 'Update on your leave request',
+  rejectBody: [
+    'Hi {name},',
+    '',
+    'Thank you for submitting your {type} leave request for {from} to {to}. After reviewing the schedule and team coverage, we’re unable to approve it at this time.',
+    '',
+    '{managerNote}',
+    '',
+    'If you’d like to discuss alternative dates or have questions, please reply to this email.',
+    '',
+    'Thank you for your understanding.'
+  ].join('\n'),
   cancelSubject: 'Leave cancelled',
   cancelBody: '{name}, your leave from {from} to {to} has been cancelled.'
 };
