@@ -251,8 +251,18 @@ const DEFAULT_LEAVE_EMAIL_TEMPLATES = {
   requestBody: '{name} applied for {type} leave from {from} to {to}.',
   approveSubject: 'Leave approved',
   approveBody: '{name}, your leave from {from} to {to} has been approved.',
-  rejectSubject: 'Leave rejected',
-  rejectBody: '{name}, your leave from {from} to {to} has been rejected.',
+  rejectSubject: 'Update on your leave request',
+  rejectBody: [
+    'Hi {name},',
+    '',
+    'Thank you for submitting your {type} leave request for {from} to {to}. After reviewing the schedule and team coverage, we’re unable to approve it at this time.',
+    '',
+    '{managerNote}',
+    '',
+    'If you’d like to discuss alternative dates or have questions, please reply to this email.',
+    '',
+    'Thank you for your understanding.'
+  ].join('\n'),
   cancelSubject: 'Leave cancelled',
   cancelBody: '{name}, your leave from {from} to {to} has been cancelled.'
 };
@@ -1602,6 +1612,101 @@ const CANDIDATE_STATUSES = [
   'Hired'
 ];
 const POSITION_STATUSES = ['Open', 'Closed'];
+
+function extractEmail(text) {
+  if (!text) return '';
+  const str = typeof text === 'string' ? text : String(text || '');
+  const match = str.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  return match ? match[0].trim() : '';
+}
+
+function resolveRecruitmentApplication(candidate, recruitmentApplications = [], positionId = null) {
+  if (!candidate || !Array.isArray(recruitmentApplications)) return null;
+  const candidateMongoId = candidate?._id ? candidate._id.toString() : null;
+  const candidateLegacyId = candidate?.id ?? null;
+
+  return recruitmentApplications.find(app => {
+    if (!app) return false;
+    const appCandidateId = app?.candidateId?.toString?.();
+    const appLegacyId = app?.candidateLegacyId;
+    const matchesCandidate =
+      (appCandidateId && candidateMongoId && appCandidateId === candidateMongoId) ||
+      (appLegacyId != null && candidateLegacyId != null && String(appLegacyId) === String(candidateLegacyId));
+    if (!matchesCandidate) return false;
+
+    if (!positionId) return true;
+
+    const appPositionId = app?.positionId?.toString?.();
+    const appLegacyPositionId = app?.positionLegacyId;
+    return (
+      (appPositionId && appPositionId === String(positionId)) ||
+      (appLegacyPositionId != null && String(appLegacyPositionId) === String(positionId))
+    );
+  });
+}
+
+function resolveCandidateEmail(candidate, recruitmentApplications = []) {
+  const emailFromCandidate =
+    extractEmail(candidate?.contact) ||
+    extractEmail(candidate?.email) ||
+    extractEmail(candidate?.phone) ||
+    extractEmail(candidate?.contactEmail) ||
+    extractEmail(candidate?.contactInfo);
+  if (emailFromCandidate) return emailFromCandidate;
+
+  const application = resolveRecruitmentApplication(
+    candidate,
+    recruitmentApplications,
+    candidate?.positionId || candidate?.positionLegacyId || candidate?.positionObjectId
+  );
+  if (!application) return '';
+
+  return (
+    extractEmail(application?.email) ||
+    extractEmail(application?.contact) ||
+    extractEmail(application?.contactEmail) ||
+    extractEmail(application?.contactInfo) ||
+    ''
+  );
+}
+
+async function sendRecruitmentRejectionEmail({ candidate, previousStatus, recruitmentApplications, positions }) {
+  const wasRejected = typeof previousStatus === 'string' && previousStatus.trim().toLowerCase() === 'rejected';
+  const isRejected = typeof candidate?.status === 'string' && candidate.status.trim().toLowerCase() === 'rejected';
+  if (wasRejected || !isRejected) return;
+
+  const email = resolveCandidateEmail(candidate, recruitmentApplications);
+  if (!email) return;
+
+  const position = Array.isArray(positions)
+    ? positions.find(pos =>
+        pos &&
+        (pos.id == candidate?.positionId ||
+          pos._id?.toString?.() === candidate?.positionId?.toString?.() ||
+          pos.id == candidate?.positionLegacyId ||
+          pos._id?.toString?.() === candidate?.positionLegacyId?.toString?.())
+      )
+    : null;
+  const positionTitle = position?.title ? position.title.toString().trim() : '';
+  const name = candidate?.name || candidate?.fullName || 'there';
+
+  const subject = positionTitle
+    ? `Update on your ${positionTitle} application`
+    : 'Update on your application';
+  const bodyLines = [
+    `Hi ${name},`,
+    '',
+    positionTitle
+      ? `Thank you for taking the time to apply for the ${positionTitle} role. After careful review, we will not be moving forward with your application at this time.`
+      : 'Thank you for taking the time to apply. After careful review, we will not be moving forward with your application at this time.',
+    'We appreciate your interest and encourage you to apply for future opportunities that match your skills.',
+    '',
+    'Best regards,',
+    'The Recruitment Team'
+  ];
+
+  await sendEmail(email, subject, bodyLines.join('\n'));
+}
 
 function parsePositionStatus(status) {
   const normalized = typeof status === 'string' ? status.trim().toLowerCase() : '';
@@ -3164,6 +3269,7 @@ init().then(async () => {
     if (!candidate) {
       return res.status(404).json({ error: 'Candidate not found' });
     }
+    const previousStatus = candidate.status;
     const updates = {};
     if (Object.prototype.hasOwnProperty.call(req.body, 'positionId')) {
       const newPositionId = Number(req.body.positionId);
@@ -3216,6 +3322,12 @@ init().then(async () => {
     candidate.updatedAt = new Date().toISOString();
     await db.write();
     const { cv, comments = [], ...rest } = candidate;
+    await sendRecruitmentRejectionEmail({
+      candidate,
+      previousStatus,
+      recruitmentApplications: db.data.recruitmentApplications || [],
+      positions: db.data.positions || []
+    });
     res.json({
       ...rest,
       commentCount: comments.length,
@@ -3244,10 +3356,17 @@ init().then(async () => {
     db.data.candidates = db.data.candidates || [];
     const candidate = db.data.candidates.find(c => c.id == req.params.id);
     if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
+    const previousStatus = candidate.status;
     candidate.status = status;
     candidate.updatedAt = new Date().toISOString();
     await db.write();
     const { cv, comments = [], ...rest } = candidate;
+    await sendRecruitmentRejectionEmail({
+      candidate,
+      previousStatus,
+      recruitmentApplications: db.data.recruitmentApplications || [],
+      positions: db.data.positions || []
+    });
     res.json({
       ...rest,
       commentCount: comments.length,
@@ -5782,7 +5901,9 @@ init().then(async () => {
     const name = emp?.name || email || `Employee ${app.employeeId}`;
     if (email) {
       const templates = (await loadEmailSettings())?.templates || DEFAULT_LEAVE_EMAIL_TEMPLATES;
-      const templateVars = { name, type: app.type, from: app.from, to: app.to };
+      const managerNote = remark?.toString().trim()
+        || 'Please reply if you’d like to discuss alternative dates or have questions.';
+      const templateVars = { name, type: app.type, from: app.from, to: app.to, managerNote };
       await sendEmail(
         email,
         renderTemplate(templates.rejectSubject, templateVars),
