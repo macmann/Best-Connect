@@ -158,7 +158,10 @@ function updateBalanceWarning(balanceMap = {}) {
   const warningText = warningEl.querySelector('p');
   if (warningText) {
     const readableTypes = negativeTypes.map(capitalize).join(', ');
-    warningText.textContent = `Negative balance for ${readableTypes}. Applications for these types are temporarily disabled.`;
+    const managerOverride = isManagerRole(currentUser?.role)
+      ? ' Managers can proceed but balances will go negative.'
+      : ' Applications for these types are temporarily disabled.';
+    warningText.textContent = `Negative balance for ${readableTypes}.${managerOverride}`;
   }
   warningEl.classList.remove('hidden');
 }
@@ -176,7 +179,7 @@ function populateLeaveTypeOptions(selectEl, balanceMap = {}) {
   let firstEnabled = '';
   types.forEach(type => {
     const balance = balanceMap[type] ?? 0;
-    const isDisabled = balance < 0;
+    const isDisabled = balance < 0 && !isManagerRole(currentUser?.role);
     const opt = document.createElement('option');
     opt.value = type;
     opt.disabled = isDisabled;
@@ -6027,7 +6030,7 @@ function onApplySubmit(ev) {
     showToast('Please fill in all required leave details before continuing.', 'warning');
     return;
   }
-  if (currentLeaveBalances[type] < 0) {
+  if (currentLeaveBalances[type] < 0 && !isManagerRole(currentUser?.role)) {
     showToast('This leave type is disabled because the balance is negative.', 'warning');
     return;
   }
