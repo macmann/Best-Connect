@@ -1601,6 +1601,9 @@ const WIDGET_JWT_SECRET = process.env.WIDGET_JWT_SECRET || process.env.JWT_SECRE
 const WIDGET_JWT_EXPIRES_IN = Number(process.env.WIDGET_JWT_EXPIRES_IN || 300);
 const DEFAULT_CHAT_WIDGET_URL =
   'https://qa.atenxion.ai/chat-widget?agentchainId=6900712037c0ed036821b334';
+const DEFAULT_POST_LOGIN_URL = 'https://api-qa.atenxion.ai/api/post-login/user-login';
+const DEFAULT_POST_LOGIN_AUTH =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZ2VudElkIjoiNjkwMDcxMjAzN2MwZWQwMzY4MjFiMzM0IiwidHlwZSI6Im11bHRpYWdlbnQiLCJpYXQiOjE3NjE2MzY2NDB9.-reLuknFL4cc26r2BGms92CZnSHj-J3riIgo7XM4ZcI';
 
 function genToken() {
   return Math.random().toString(36).slice(2) + Date.now();
@@ -3829,7 +3832,7 @@ init().then(async () => {
     }
   );
 
-  function normalizeChatWidgetUrl(value) {
+  function normalizeExternalUrl(value) {
     const trimmed = typeof value === 'string' ? value.trim() : '';
     if (!trimmed) return '';
     try {
@@ -3839,6 +3842,10 @@ init().then(async () => {
       return null;
     }
     return trimmed;
+  }
+
+  function normalizeChatWidgetUrl(value) {
+    return normalizeExternalUrl(value);
   }
 
   // ---- CHAT WIDGET SETTINGS ----
@@ -3878,6 +3885,54 @@ init().then(async () => {
     } catch (err) {
       console.error('Failed to save chat widget settings', err);
       res.status(500).json({ error: 'Unable to save chat widget settings.' });
+    }
+  });
+
+  // ---- POST-LOGIN SYNC SETTINGS ----
+  app.get('/settings/post-login', authRequired, async (_req, res) => {
+    try {
+      await db.read();
+      const stored = db.data.settings?.postLogin;
+      const storedUrl = typeof stored?.url === 'string' ? stored.url.trim() : '';
+      const storedToken = typeof stored?.token === 'string' ? stored.token.trim() : '';
+      res.json({
+        url: storedUrl || DEFAULT_POST_LOGIN_URL,
+        token: storedToken || DEFAULT_POST_LOGIN_AUTH,
+        defaultUrl: DEFAULT_POST_LOGIN_URL,
+        defaultToken: DEFAULT_POST_LOGIN_AUTH,
+        hasCustomUrl: Boolean(storedUrl),
+        hasCustomToken: Boolean(storedToken)
+      });
+    } catch (err) {
+      console.error('Failed to load post-login settings', err);
+      res.status(500).json({ error: 'Unable to load post-login settings.' });
+    }
+  });
+
+  app.put('/settings/post-login', authRequired, managerOnly, async (req, res) => {
+    try {
+      const incomingUrl = normalizeExternalUrl(req.body?.url);
+      if (incomingUrl === null) {
+        return res.status(400).json({ error: 'Post-login URL must be a valid URL.' });
+      }
+      const incomingToken = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+
+      await db.read();
+      db.data.settings = db.data.settings && typeof db.data.settings === 'object' ? db.data.settings : {};
+      db.data.settings.postLogin = { url: incomingUrl || '', token: incomingToken || '' };
+      await db.write();
+
+      res.json({
+        url: incomingUrl || DEFAULT_POST_LOGIN_URL,
+        token: incomingToken || DEFAULT_POST_LOGIN_AUTH,
+        defaultUrl: DEFAULT_POST_LOGIN_URL,
+        defaultToken: DEFAULT_POST_LOGIN_AUTH,
+        hasCustomUrl: Boolean(incomingUrl),
+        hasCustomToken: Boolean(incomingToken)
+      });
+    } catch (err) {
+      console.error('Failed to save post-login settings', err);
+      res.status(500).json({ error: 'Unable to save post-login settings.' });
     }
   });
 

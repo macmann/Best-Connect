@@ -20,9 +20,8 @@ let holidaysLoading = null;
 let managerOptionsCache = null;
 let managerOptionsPromise = null;
 
-const POST_LOGIN_API_BASE = 'https://api-qa.atenxion.ai';
-const POST_LOGIN_PATH = '/api/post-login/user-login';
-const POST_LOGIN_AUTH =
+const DEFAULT_POST_LOGIN_URL = 'https://api-qa.atenxion.ai/api/post-login/user-login';
+const DEFAULT_POST_LOGIN_AUTH =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZ2VudElkIjoiNjkwMDcxMjAzN2MwZWQwMzY4MjFiMzM0IiwidHlwZSI6Im11bHRpYWdlbnQiLCJpYXQiOjE3NjE2MzY2NDB9.-reLuknFL4cc26r2BGms92CZnSHj-J3riIgo7XM4ZcI';
 const POST_LOGIN_TIMEOUT_MS = 5000;
 const DEFAULT_CHAT_WIDGET_URL =
@@ -251,8 +250,17 @@ function updateChatWidgetUser(employeeId) {
   iframe.src = widgetUrl.toString();
 }
 
-function buildPostLoginUrl() {
-  return `${POST_LOGIN_API_BASE}${POST_LOGIN_PATH}`;
+function resolvePostLoginConfig(settings = postLoginSettings) {
+  const url = settings?.hasCustomUrl
+    ? settings.url
+    : settings?.url || DEFAULT_POST_LOGIN_URL;
+  const token = settings?.hasCustomToken
+    ? settings.token
+    : settings?.token || DEFAULT_POST_LOGIN_AUTH;
+  return {
+    url: url || DEFAULT_POST_LOGIN_URL,
+    token: token || ''
+  };
 }
 
 function jsonBlob(payload) {
@@ -299,15 +307,13 @@ async function fetchManagerOptions() {
 
 function queuePostLoginSync(employeeId) {
   if (!employeeId) return;
-
-  const url = buildPostLoginUrl();
   const normalizedEmployeeId = String(employeeId);
   const body = {
     employeeId: normalizedEmployeeId,
-    userId:normalizedEmployeeId
+    userId: normalizedEmployeeId
   };
 
-  const sendBeaconFallback = () => {
+  const sendBeaconFallback = (url) => {
     if (typeof navigator === 'undefined' || typeof navigator.sendBeacon !== 'function') {
       console.warn('navigator.sendBeacon is unavailable; post-login sync could not be queued.');
       return;
@@ -326,23 +332,27 @@ function queuePostLoginSync(employeeId) {
     }
   };
 
-  if (typeof fetch !== 'function') {
-    sendBeaconFallback();
-    return;
-  }
-
   (async () => {
+    const resolvedSettings = await loadPostLoginSettings({ silent: true }).catch(() => null);
+    const { url, token } = resolvePostLoginConfig(resolvedSettings || postLoginSettings);
+
+    if (typeof fetch !== 'function') {
+      sendBeaconFallback(url);
+      return;
+    }
+
     try {
       const startTime = Date.now();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers.Authorization = token;
+      }
       console.info('Initiating post-login sync request.', { url, body });
       const response = await timeoutFetch(
         url,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: POST_LOGIN_AUTH
-          },
+          headers,
           body: JSON.stringify(body),
           keepalive: true
         },
@@ -366,7 +376,7 @@ function queuePostLoginSync(employeeId) {
         url,
         body
       });
-      sendBeaconFallback();
+      sendBeaconFallback(url);
     }
   })();
 }
@@ -635,6 +645,9 @@ let aiSettingsLoading = null;
 let chatWidgetSettings = null;
 let chatWidgetSettingsLoaded = false;
 let chatWidgetSettingsLoading = null;
+let postLoginSettings = null;
+let postLoginSettingsLoaded = false;
+let postLoginSettingsLoading = null;
 let aiModelOptions = [
   { value: 'gpt-5', label: 'GPT5' },
   { value: 'gpt-5.1-mini', label: 'GPT5.1 mini' },
@@ -711,6 +724,7 @@ document.addEventListener('DOMContentLoaded', () => {
       localStorage.setItem('brillar_user', JSON.stringify(currentUser));
       queuePostLoginSync(currentUser?.employeeId);
       loadChatWidgetSettings({ force: true, silent: true });
+      loadPostLoginSettings({ force: true, silent: true });
     } catch {}
     window.history.replaceState({}, document.title, '/');
   }
@@ -729,6 +743,7 @@ document.addEventListener('DOMContentLoaded', () => {
       currentUser = JSON.parse(localStorage.getItem('brillar_user'));
     } catch {}
     loadChatWidgetSettings({ force: true, silent: true });
+    loadPostLoginSettings({ force: true, silent: true });
     toggleTabsByRole();
     init();
   }
@@ -752,6 +767,7 @@ document.getElementById('loginForm').onsubmit = async function(ev) {
     localStorage.setItem('brillar_user', JSON.stringify(currentUser));
     queuePostLoginSync(currentUser?.employeeId);
     loadChatWidgetSettings({ force: true, silent: true });
+    loadPostLoginSettings({ force: true, silent: true });
     document.getElementById('loginPage').classList.add('hidden');
     document.getElementById('logoutBtn').classList.remove('hidden');
     document.getElementById('changePassBtn').classList.remove('hidden');
@@ -1005,6 +1021,7 @@ function showPanel(name) {
       loadEmailSettingsConfig();
       loadAiSettingsConfig();
       loadChatWidgetSettings();
+      loadPostLoginSettings();
     }
   }
   if (name === 'finance' && financePanel) {
@@ -3668,6 +3685,145 @@ async function onChatWidgetSettingsSubmit(ev) {
   }
 }
 
+function setPostLoginSettingsStatus(message, type = 'info') {
+  const statusEl = document.getElementById('postLoginSettingsStatus');
+  if (!statusEl) return;
+  statusEl.textContent = message || '';
+  statusEl.classList.remove('settings-status--error', 'settings-status--success');
+  if (!message) {
+    statusEl.classList.add('text-muted');
+    return;
+  }
+  statusEl.classList.remove('text-muted');
+  if (type === 'error') {
+    statusEl.classList.add('settings-status--error');
+  } else if (type === 'success') {
+    statusEl.classList.add('settings-status--success');
+  }
+}
+
+function renderPostLoginSettingsForm() {
+  const urlInput = document.getElementById('postLoginUrl');
+  const tokenInput = document.getElementById('postLoginToken');
+  const helpText = document.getElementById('postLoginSettingsHelp');
+  if (urlInput) {
+    urlInput.value = postLoginSettings?.hasCustomUrl ? postLoginSettings.url : '';
+    urlInput.placeholder = postLoginSettings?.defaultUrl || DEFAULT_POST_LOGIN_URL;
+  }
+  if (tokenInput) {
+    tokenInput.value = postLoginSettings?.hasCustomToken ? postLoginSettings.token : '';
+    tokenInput.placeholder = postLoginSettings?.hasCustomToken
+      ? ''
+      : 'Using default authorization token';
+  }
+  if (helpText) {
+    const defaultUrl = postLoginSettings?.defaultUrl || DEFAULT_POST_LOGIN_URL;
+    helpText.textContent = `Default sync URL: ${defaultUrl}`;
+  }
+}
+
+function resetPostLoginSettingsToDefault() {
+  const urlInput = document.getElementById('postLoginUrl');
+  const tokenInput = document.getElementById('postLoginToken');
+  if (urlInput) {
+    urlInput.value = '';
+    urlInput.placeholder = postLoginSettings?.defaultUrl || DEFAULT_POST_LOGIN_URL;
+  }
+  if (tokenInput) {
+    tokenInput.value = '';
+    tokenInput.placeholder = 'Using default authorization token';
+  }
+  setPostLoginSettingsStatus('Default post-login settings will be used after saving.');
+}
+
+async function fetchPostLoginSettings({ force = false } = {}) {
+  if (!force && postLoginSettingsLoaded && !postLoginSettingsLoading) {
+    return postLoginSettings;
+  }
+  if (!force && postLoginSettingsLoading) {
+    return postLoginSettingsLoading;
+  }
+
+  const request = (async () => {
+    const res = await apiFetch('/settings/post-login');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Unable to load post-login settings.');
+    }
+    return data;
+  })();
+
+  postLoginSettingsLoading = request;
+
+  try {
+    const settings = await request;
+    postLoginSettings = settings || {};
+    postLoginSettingsLoaded = true;
+    return settings;
+  } finally {
+    postLoginSettingsLoading = null;
+  }
+}
+
+async function loadPostLoginSettings({ force = false, silent = false } = {}) {
+  if (!currentUser) return null;
+  if (!force && postLoginSettingsLoaded) {
+    renderPostLoginSettingsForm();
+    if (!silent) setPostLoginSettingsStatus('Post-login settings loaded.');
+    return postLoginSettings;
+  }
+  if (!silent) setPostLoginSettingsStatus('Loading post-login settings...');
+  try {
+    const settings = await fetchPostLoginSettings({ force });
+    postLoginSettings = settings || {};
+    postLoginSettingsLoaded = true;
+    renderPostLoginSettingsForm();
+    if (!silent) setPostLoginSettingsStatus('Post-login settings loaded.');
+    return postLoginSettings;
+  } catch (err) {
+    console.error('Unable to load post-login settings', err);
+    if (!silent) {
+      setPostLoginSettingsStatus(err.message || 'Unable to load post-login settings.', 'error');
+    }
+    return null;
+  }
+}
+
+async function onPostLoginSettingsSubmit(ev) {
+  ev.preventDefault();
+  if (!currentUser || !isManagerRole(currentUser)) return;
+  const form = ev.currentTarget;
+  const submitBtn = form?.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
+  setPostLoginSettingsStatus('Saving post-login settings...');
+  try {
+    const urlInput = document.getElementById('postLoginUrl');
+    const tokenInput = document.getElementById('postLoginToken');
+    const payload = {
+      url: urlInput?.value ? urlInput.value.trim() : '',
+      token: tokenInput?.value ? tokenInput.value.trim() : ''
+    };
+    const res = await apiFetch('/settings/post-login', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to save post-login settings.');
+    }
+    postLoginSettings = data || payload;
+    postLoginSettingsLoaded = true;
+    renderPostLoginSettingsForm();
+    setPostLoginSettingsStatus('Post-login settings saved successfully.', 'success');
+  } catch (err) {
+    console.error('Failed to save post-login settings', err);
+    setPostLoginSettingsStatus(err.message || 'Unable to save post-login settings.', 'error');
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
 async function initRecruitment() {
   if (!currentUser || !isManagerRole(currentUser)) return;
   if (recruitmentInitialized) return;
@@ -5782,6 +5938,10 @@ async function init() {
   if (chatWidgetForm) chatWidgetForm.addEventListener('submit', onChatWidgetSettingsSubmit);
   const chatWidgetDefaultBtn = document.getElementById('chatWidgetUseDefault');
   if (chatWidgetDefaultBtn) chatWidgetDefaultBtn.addEventListener('click', resetChatWidgetUrlToDefault);
+  const postLoginForm = document.getElementById('postLoginSettingsForm');
+  if (postLoginForm) postLoginForm.addEventListener('submit', onPostLoginSettingsSubmit);
+  const postLoginDefaultBtn = document.getElementById('postLoginUseDefault');
+  if (postLoginDefaultBtn) postLoginDefaultBtn.addEventListener('click', resetPostLoginSettingsToDefault);
   const emailProviderSelect = document.getElementById('emailProvider');
   if (emailProviderSelect) {
     emailProviderSelect.addEventListener('change', onEmailProviderChange);

@@ -2803,6 +2803,41 @@
 
         <div class="md-card">
           <div class="card-title">
+            <span class="material-symbols-rounded">sync</span>
+            Post-login Sync
+          </div>
+          <p class="card-subtitle">Configure the Atenxion post-login sync endpoint and authorization token.</p>
+          <form id="postLoginSettingsForm" class="settings-form">
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label" for="postLoginUrl">Sync URL</label>
+              <div class="md-input-wrapper">
+                <span class="material-symbols-rounded">link</span>
+                <input type="url" id="postLoginUrl" class="md-input" placeholder="https://example.com/api/post-login/user-login">
+              </div>
+            </div>
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label" for="postLoginToken">Authorization token</label>
+              <div class="md-input-wrapper">
+                <span class="material-symbols-rounded">key</span>
+                <input type="text" id="postLoginToken" class="md-input" placeholder="Bearer <token> or raw token">
+              </div>
+            </div>
+            <div class="settings-form__help" id="postLoginSettingsHelp"></div>
+            <div class="settings-form__fields settings-form__fields--full">
+              <button type="button" id="postLoginUseDefault" class="md-button md-button--outlined md-button--small">
+                Use default sync settings
+              </button>
+            </div>
+            <button type="submit" class="md-button md-button--filled md-button--small settings-form__submit">
+              <span class="material-symbols-rounded">save</span>
+              Save post-login settings
+            </button>
+          </form>
+          <div id="postLoginSettingsStatus" class="settings-status text-muted"></div>
+        </div>
+
+        <div class="md-card">
+          <div class="card-title">
             <span class="material-symbols-rounded">mail</span>
             Email Notifications
           </div>
