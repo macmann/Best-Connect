@@ -2991,7 +2991,7 @@ init().then(async () => {
   });
 
   // ========== RECRUITMENT PIPELINE ==========
-  app.post('/api/recruitment/roles', authRequired, managerOnly, async (req, res) => {
+  app.post('/api/recruitment/roles', async (req, res) => {
     await db.read();
     normalizePositionsData(db);
     const title = (req.body.title || '').trim();
@@ -3022,7 +3022,7 @@ init().then(async () => {
     res.status(201).json(role);
   });
 
-  app.post('/api/recruitment/candidates', authRequired, managerOnly, async (req, res) => {
+  app.post('/api/recruitment/candidates', async (req, res) => {
     await db.read();
     normalizePositionsData(db);
     db.data.positions = db.data.positions || [];
@@ -3075,210 +3075,180 @@ init().then(async () => {
     res.status(201).json(buildCandidateSummary(candidate, positionMap));
   });
 
-  app.get(
-    '/api/recruitment/candidates/by-role',
-    authRequired,
-    managerOnly,
-    async (req, res) => {
-      await db.read();
-      db.data.positions = db.data.positions || [];
-      db.data.candidates = db.data.candidates || [];
-      const rawRoleId = req.query.roleId || req.query.positionId;
-      const roleTitle = (req.query.roleTitle || '').toString().trim();
-      const roleId = rawRoleId !== undefined && rawRoleId !== null ? Number(rawRoleId) : null;
-      const hasRoleId = roleId !== null && !Number.isNaN(roleId);
-      if (!hasRoleId && !roleTitle) {
-        return res.status(400).json({ error: 'Role identifier is required' });
-      }
-
-      let role = null;
-      if (hasRoleId) {
-        role = resolveRoleById(db.data.positions, roleId);
-      } else {
-        role = resolveRoleByTitle(db.data.positions, roleTitle);
-      }
-
-      if (!role) {
-        return res.status(404).json({ error: 'Role not found' });
-      }
-
-      const roleIds = buildRoleIdentifierSet(role);
-      const positionMap = buildPositionTitleMap(db.data.positions);
-      const candidates = db.data.candidates
-        .filter(candidate => candidateMatchesRole(candidate, roleIds))
-        .map(candidate => buildCandidateSummary(candidate, positionMap));
-
-      res.json({
-        roleId: role.id ?? null,
-        roleTitle: role.title || null,
-        count: candidates.length,
-        candidates
-      });
+  app.get('/api/recruitment/candidates/by-role', async (req, res) => {
+    await db.read();
+    db.data.positions = db.data.positions || [];
+    db.data.candidates = db.data.candidates || [];
+    const rawRoleId = req.query.roleId || req.query.positionId;
+    const roleTitle = (req.query.roleTitle || '').toString().trim();
+    const roleId = rawRoleId !== undefined && rawRoleId !== null ? Number(rawRoleId) : null;
+    const hasRoleId = roleId !== null && !Number.isNaN(roleId);
+    if (!hasRoleId && !roleTitle) {
+      return res.status(400).json({ error: 'Role identifier is required' });
     }
-  );
 
-  app.get(
-    '/api/recruitment/candidates/by-name',
-    authRequired,
-    managerOnly,
-    async (req, res) => {
-      await db.read();
-      db.data.positions = db.data.positions || [];
-      db.data.candidates = db.data.candidates || [];
-      const rawQuery = (req.query.name || req.query.q || '').toString().trim();
-      if (!rawQuery) {
-        return res.status(400).json({ error: 'Name query is required' });
-      }
-      const query = rawQuery.toLowerCase();
-      const positionMap = buildPositionTitleMap(db.data.positions);
-      const matches = db.data.candidates
-        .filter(candidate => (candidate.name || '').toLowerCase().includes(query))
-        .sort(
-          (a, b) =>
-            new Date(b.updatedAt || b.createdAt || 0) -
-            new Date(a.updatedAt || a.createdAt || 0)
-        )
-        .slice(0, 50)
-        .map(candidate => buildCandidateSummary(candidate, positionMap));
-      res.json(matches);
+    let role = null;
+    if (hasRoleId) {
+      role = resolveRoleById(db.data.positions, roleId);
+    } else {
+      role = resolveRoleByTitle(db.data.positions, roleTitle);
     }
-  );
 
-  app.get(
-    '/api/recruitment/candidates/summary',
-    authRequired,
-    managerOnly,
-    async (req, res) => {
-      await db.read();
-      db.data.positions = db.data.positions || [];
-      db.data.candidates = db.data.candidates || [];
-      const rawQuery = (req.query.name || req.query.q || '').toString().trim();
-      if (!rawQuery) {
-        return res.status(400).json({ error: 'Name query is required' });
-      }
-      const query = rawQuery.toLowerCase();
-      const positionMap = buildPositionTitleMap(db.data.positions);
-      const candidates = db.data.candidates
-        .filter(candidate => (candidate.name || '').toLowerCase().includes(query))
-        .sort(
-          (a, b) =>
-            new Date(b.updatedAt || b.createdAt || 0) -
-            new Date(a.updatedAt || a.createdAt || 0)
-        )
-        .slice(0, 50)
-        .map(candidate => buildCandidateSummary(candidate, positionMap));
-
-      res.json({
-        query: rawQuery,
-        count: candidates.length,
-        candidates
-      });
+    if (!role) {
+      return res.status(404).json({ error: 'Role not found' });
     }
-  );
 
-  app.get(
-    '/api/recruitment/roles/:id/applications/count',
-    authRequired,
-    managerOnly,
-    async (req, res) => {
-      await db.read();
-      normalizePositionsData(db);
-      const roleId = Number(req.params.id);
-      if (!roleId || Number.isNaN(roleId)) {
-        return res.status(400).json({ error: 'Role identifier is required' });
-      }
-      const role = resolveRoleById(db.data.positions, roleId);
-      if (!role) {
-        return res.status(404).json({ error: 'Role not found' });
-      }
-      const roleIds = buildRoleIdentifierSet(role);
-      const recruitmentApplications = Array.isArray(db.data.recruitmentApplications)
-        ? db.data.recruitmentApplications
-        : [];
-      const count = recruitmentApplications.filter(app => applicationMatchesRole(app, roleIds)).length;
+    const roleIds = buildRoleIdentifierSet(role);
+    const positionMap = buildPositionTitleMap(db.data.positions);
+    const candidates = db.data.candidates
+      .filter(candidate => candidateMatchesRole(candidate, roleIds))
+      .map(candidate => buildCandidateSummary(candidate, positionMap));
 
-      res.json({
-        roleId: role.id ?? null,
-        roleTitle: role.title || null,
-        count
-      });
+    res.json({
+      roleId: role.id ?? null,
+      roleTitle: role.title || null,
+      count: candidates.length,
+      candidates
+    });
+  });
+
+  app.get('/api/recruitment/candidates/by-name', async (req, res) => {
+    await db.read();
+    db.data.positions = db.data.positions || [];
+    db.data.candidates = db.data.candidates || [];
+    const rawQuery = (req.query.name || req.query.q || '').toString().trim();
+    if (!rawQuery) {
+      return res.status(400).json({ error: 'Name query is required' });
     }
-  );
+    const query = rawQuery.toLowerCase();
+    const positionMap = buildPositionTitleMap(db.data.positions);
+    const matches = db.data.candidates
+      .filter(candidate => (candidate.name || '').toLowerCase().includes(query))
+      .sort(
+        (a, b) =>
+          new Date(b.updatedAt || b.createdAt || 0) -
+          new Date(a.updatedAt || a.createdAt || 0)
+      )
+      .slice(0, 50)
+      .map(candidate => buildCandidateSummary(candidate, positionMap));
+    res.json(matches);
+  });
 
-  app.get(
-    '/api/recruitment/roles/:id/hired',
-    authRequired,
-    managerOnly,
-    async (req, res) => {
-      await db.read();
-      normalizePositionsData(db);
-      db.data.candidates = db.data.candidates || [];
-      const roleId = Number(req.params.id);
-      if (!roleId || Number.isNaN(roleId)) {
-        return res.status(400).json({ error: 'Role identifier is required' });
-      }
-      const role = resolveRoleById(db.data.positions, roleId);
-      if (!role) {
-        return res.status(404).json({ error: 'Role not found' });
-      }
-      const roleIds = buildRoleIdentifierSet(role);
-      const positionMap = buildPositionTitleMap(db.data.positions);
-      const hiredCandidates = db.data.candidates
-        .filter(candidate => candidateMatchesRole(candidate, roleIds))
-        .filter(candidate => (candidate.status || '').toLowerCase() === 'hired')
-        .map(candidate => buildCandidateSummary(candidate, positionMap));
-
-      res.json({
-        roleId: role.id ?? null,
-        roleTitle: role.title || null,
-        hired: hiredCandidates.length > 0,
-        count: hiredCandidates.length,
-        candidates: hiredCandidates
-      });
+  app.get('/api/recruitment/candidates/summary', async (req, res) => {
+    await db.read();
+    db.data.positions = db.data.positions || [];
+    db.data.candidates = db.data.candidates || [];
+    const rawQuery = (req.query.name || req.query.q || '').toString().trim();
+    if (!rawQuery) {
+      return res.status(400).json({ error: 'Name query is required' });
     }
-  );
+    const query = rawQuery.toLowerCase();
+    const positionMap = buildPositionTitleMap(db.data.positions);
+    const candidates = db.data.candidates
+      .filter(candidate => (candidate.name || '').toLowerCase().includes(query))
+      .sort(
+        (a, b) =>
+          new Date(b.updatedAt || b.createdAt || 0) -
+          new Date(a.updatedAt || a.createdAt || 0)
+      )
+      .slice(0, 50)
+      .map(candidate => buildCandidateSummary(candidate, positionMap));
 
-  app.get(
-    '/api/recruitment/roles/:id/interviews',
-    authRequired,
-    managerOnly,
-    async (req, res) => {
-      await db.read();
-      normalizePositionsData(db);
-      db.data.candidates = db.data.candidates || [];
-      const roleId = Number(req.params.id);
-      if (!roleId || Number.isNaN(roleId)) {
-        return res.status(400).json({ error: 'Role identifier is required' });
-      }
-      const role = resolveRoleById(db.data.positions, roleId);
-      if (!role) {
-        return res.status(404).json({ error: 'Role not found' });
-      }
-      const roleIds = buildRoleIdentifierSet(role);
-      const positionMap = buildPositionTitleMap(db.data.positions);
-      const candidates = db.data.candidates
-        .filter(candidate => candidateMatchesRole(candidate, roleIds))
-        .filter(
-          candidate => (candidate.status || '').toLowerCase() === 'selected for interview'
-        )
-        .map(candidate => buildCandidateSummary(candidate, positionMap));
+    res.json({
+      query: rawQuery,
+      count: candidates.length,
+      candidates
+    });
+  });
 
-      res.json({
-        roleId: role.id ?? null,
-        roleTitle: role.title || null,
-        count: candidates.length,
-        candidates
-      });
+  app.get('/api/recruitment/roles/:id/applications/count', async (req, res) => {
+    await db.read();
+    normalizePositionsData(db);
+    const roleId = Number(req.params.id);
+    if (!roleId || Number.isNaN(roleId)) {
+      return res.status(400).json({ error: 'Role identifier is required' });
     }
-  );
+    const role = resolveRoleById(db.data.positions, roleId);
+    if (!role) {
+      return res.status(404).json({ error: 'Role not found' });
+    }
+    const roleIds = buildRoleIdentifierSet(role);
+    const recruitmentApplications = Array.isArray(db.data.recruitmentApplications)
+      ? db.data.recruitmentApplications
+      : [];
+    const count = recruitmentApplications.filter(app => applicationMatchesRole(app, roleIds)).length;
 
-  app.get('/recruitment/positions', authRequired, managerOnly, async (req, res) => {
+    res.json({
+      roleId: role.id ?? null,
+      roleTitle: role.title || null,
+      count
+    });
+  });
+
+  app.get('/api/recruitment/roles/:id/hired', async (req, res) => {
+    await db.read();
+    normalizePositionsData(db);
+    db.data.candidates = db.data.candidates || [];
+    const roleId = Number(req.params.id);
+    if (!roleId || Number.isNaN(roleId)) {
+      return res.status(400).json({ error: 'Role identifier is required' });
+    }
+    const role = resolveRoleById(db.data.positions, roleId);
+    if (!role) {
+      return res.status(404).json({ error: 'Role not found' });
+    }
+    const roleIds = buildRoleIdentifierSet(role);
+    const positionMap = buildPositionTitleMap(db.data.positions);
+    const hiredCandidates = db.data.candidates
+      .filter(candidate => candidateMatchesRole(candidate, roleIds))
+      .filter(candidate => (candidate.status || '').toLowerCase() === 'hired')
+      .map(candidate => buildCandidateSummary(candidate, positionMap));
+
+    res.json({
+      roleId: role.id ?? null,
+      roleTitle: role.title || null,
+      hired: hiredCandidates.length > 0,
+      count: hiredCandidates.length,
+      candidates: hiredCandidates
+    });
+  });
+
+  app.get('/api/recruitment/roles/:id/interviews', async (req, res) => {
+    await db.read();
+    normalizePositionsData(db);
+    db.data.candidates = db.data.candidates || [];
+    const roleId = Number(req.params.id);
+    if (!roleId || Number.isNaN(roleId)) {
+      return res.status(400).json({ error: 'Role identifier is required' });
+    }
+    const role = resolveRoleById(db.data.positions, roleId);
+    if (!role) {
+      return res.status(404).json({ error: 'Role not found' });
+    }
+    const roleIds = buildRoleIdentifierSet(role);
+    const positionMap = buildPositionTitleMap(db.data.positions);
+    const candidates = db.data.candidates
+      .filter(candidate => candidateMatchesRole(candidate, roleIds))
+      .filter(
+        candidate => (candidate.status || '').toLowerCase() === 'selected for interview'
+      )
+      .map(candidate => buildCandidateSummary(candidate, positionMap));
+
+    res.json({
+      roleId: role.id ?? null,
+      roleTitle: role.title || null,
+      count: candidates.length,
+      candidates
+    });
+  });
+
+  app.get('/recruitment/positions', async (req, res) => {
     await db.read();
     normalizePositionsData(db);
     res.json(db.data.positions);
   });
 
-  app.post('/recruitment/positions', authRequired, managerOnly, async (req, res) => {
+  app.post('/recruitment/positions', async (req, res) => {
     await db.read();
     normalizePositionsData(db);
     const title = (req.body.title || '').trim();
@@ -3308,7 +3278,7 @@ init().then(async () => {
     res.status(201).json(newPosition);
   });
 
-  app.patch('/recruitment/positions/:id', authRequired, managerOnly, async (req, res) => {
+  app.patch('/recruitment/positions/:id', async (req, res) => {
     await db.read();
     normalizePositionsData(db);
     const position = db.data.positions.find(p => p.id == req.params.id);
@@ -3347,7 +3317,7 @@ init().then(async () => {
     res.json(position);
   });
 
-  app.get('/recruitment/candidates', authRequired, managerOnly, async (req, res) => {
+  app.get('/recruitment/candidates', async (req, res) => {
     await db.read();
     const { positionId } = req.query;
     db.data.candidates = db.data.candidates || [];
@@ -3413,7 +3383,7 @@ init().then(async () => {
     res.json(sanitized);
   });
 
-  app.post('/recruitment/candidates', authRequired, managerOnly, async (req, res) => {
+  app.post('/recruitment/candidates', async (req, res) => {
     await db.read();
     normalizePositionsData(db);
     const { positionId, name, contact, cv } = req.body;
@@ -3458,7 +3428,7 @@ init().then(async () => {
     });
   });
 
-  app.patch('/recruitment/candidates/:id', authRequired, managerOnly, async (req, res) => {
+  app.patch('/recruitment/candidates/:id', async (req, res) => {
     await db.read();
     db.data.candidates = db.data.candidates || [];
     const candidate = db.data.candidates.find(c => c.id == req.params.id);
@@ -3531,7 +3501,7 @@ init().then(async () => {
     });
   });
 
-  app.delete('/recruitment/candidates/:id', authRequired, managerOnly, async (req, res) => {
+  app.delete('/recruitment/candidates/:id', async (req, res) => {
     await db.read();
     db.data.candidates = db.data.candidates || [];
     const idx = db.data.candidates.findIndex(c => c.id == req.params.id);
@@ -3543,7 +3513,7 @@ init().then(async () => {
     res.status(204).end();
   });
 
-  app.patch('/recruitment/candidates/:id/status', authRequired, managerOnly, async (req, res) => {
+  app.patch('/recruitment/candidates/:id/status', async (req, res) => {
     await db.read();
     const { status } = req.body;
     if (!CANDIDATE_STATUSES.includes(status)) {
@@ -3652,16 +3622,11 @@ init().then(async () => {
     return res.status(404).json({ error: 'CV not found' });
   }
 
-  app.get('/recruitment/candidates/:id/cv', authRequired, managerOnly, streamCandidateCv);
+  app.get('/recruitment/candidates/:id/cv', streamCandidateCv);
 
-  app.get(
-    '/api/recruitment/candidates/:id/cv',
-    authRequired,
-    managerOnly,
-    streamCandidateCv
-  );
+  app.get('/api/recruitment/candidates/:id/cv', streamCandidateCv);
 
-  app.get('/recruitment/candidates/search', authRequired, managerOnly, async (req, res) => {
+  app.get('/recruitment/candidates/search', async (req, res) => {
     await db.read();
     const term = (req.query.q || '').toString().trim();
     if (!term) {
@@ -3701,7 +3666,7 @@ init().then(async () => {
     res.json(matches);
   });
 
-  app.get('/recruitment/candidates/:id/comments', authRequired, managerOnly, async (req, res) => {
+  app.get('/recruitment/candidates/:id/comments', async (req, res) => {
     await db.read();
     db.data.candidates = db.data.candidates || [];
     const candidate = db.data.candidates.find(c => c.id == req.params.id);
@@ -3711,7 +3676,7 @@ init().then(async () => {
     res.json(comments);
   });
 
-  app.post('/recruitment/candidates/:id/comments', authRequired, managerOnly, async (req, res) => {
+  app.post('/recruitment/candidates/:id/comments', async (req, res) => {
     await db.read();
     const text = (req.body.text || '').trim();
     if (!text) {
@@ -3725,8 +3690,8 @@ init().then(async () => {
     const comment = {
       id: generateCommentId(),
       text,
-      userId: req.user.id,
-      userEmail: req.user.email,
+      userId: req.user ? req.user.id : null,
+      userEmail: req.user ? req.user.email : null,
       createdAt: now,
       updatedAt: now
     };
@@ -3739,7 +3704,7 @@ init().then(async () => {
     });
   });
 
-  app.patch('/recruitment/candidates/:candidateId/comments/:commentId', authRequired, managerOnly, async (req, res) => {
+  app.patch('/recruitment/candidates/:candidateId/comments/:commentId', async (req, res) => {
     await db.read();
     const text = (req.body.text || '').trim();
     if (!text) {
@@ -3751,7 +3716,7 @@ init().then(async () => {
     candidate.comments = candidate.comments || [];
     const comment = candidate.comments.find(c => c.id == req.params.commentId);
     if (!comment) return res.status(404).json({ error: 'Comment not found' });
-    if (comment.userId !== req.user.id) {
+    if (comment.userId && (!req.user || comment.userId !== req.user.id)) {
       return res.status(403).json({ error: 'You can only edit your own comments' });
     }
     comment.text = text;
@@ -5915,11 +5880,11 @@ init().then(async () => {
       .send(JSON.stringify(managementOpenApi, null, 2));
   });
 
-  app.get('/api/recruitmentopenAI', authRequired, managerOnly, (req, res) => {
+  app.get('/api/recruitmentopenAI', (req, res) => {
     res.type('application/json').send(recruitmentOpenApiSpec);
   });
 
-  app.get('/api/docs/recruitment.json', authRequired, managerOnly, (req, res) => {
+  app.get('/api/docs/recruitment.json', (req, res) => {
     res.type('application/json').send(recruitmentOpenApiSpec);
   });
 

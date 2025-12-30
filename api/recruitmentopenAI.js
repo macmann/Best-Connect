@@ -12,7 +12,6 @@ const recruitmentOpenApiSpec = {
       post: {
         summary: 'Create a recruitment role',
         description: 'Adds a new role/position that candidates can be mapped to.',
-        security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
           content: {
@@ -39,7 +38,6 @@ const recruitmentOpenApiSpec = {
         summary: 'Register a candidate',
         description:
           'Creates a candidate profile mapped to a role. CV uploads are optional but supported as base64 payloads.',
-        security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
           content: {
@@ -67,7 +65,6 @@ const recruitmentOpenApiSpec = {
         summary: 'Browse candidates by role',
         description:
           'Lists candidates associated with a specific role identifier or title. Provide roleId or roleTitle.',
-        security: [{ bearerAuth: [] }],
         parameters: [
           {
             in: 'query',
@@ -102,7 +99,6 @@ const recruitmentOpenApiSpec = {
       get: {
         summary: 'Get candidate summary by name',
         description: 'Returns candidate summaries for a name query.',
-        security: [{ bearerAuth: [] }],
         parameters: [
           {
             in: 'query',
@@ -130,7 +126,6 @@ const recruitmentOpenApiSpec = {
         summary: 'Browse candidates by name',
         description:
           'Performs a case-insensitive name search and returns the most recently updated matches.',
-        security: [{ bearerAuth: [] }],
         parameters: [
           {
             in: 'query',
@@ -160,7 +155,6 @@ const recruitmentOpenApiSpec = {
       get: {
         summary: 'Count applications for a role',
         description: 'Returns how many applications have been submitted for a role.',
-        security: [{ bearerAuth: [] }],
         parameters: [
           {
             in: 'path',
@@ -188,7 +182,6 @@ const recruitmentOpenApiSpec = {
       get: {
         summary: 'Check if a role has hired candidates',
         description: 'Indicates whether any candidate has been hired for a role.',
-        security: [{ bearerAuth: [] }],
         parameters: [
           {
             in: 'path',
@@ -216,7 +209,6 @@ const recruitmentOpenApiSpec = {
       get: {
         summary: 'List interview selections for a role',
         description: 'Returns candidates selected for interviews for a role.',
-        security: [{ bearerAuth: [] }],
         parameters: [
           {
             in: 'path',
@@ -269,13 +261,6 @@ const recruitmentOpenApiSpec = {
     }
   },
   components: {
-    securitySchemes: {
-      bearerAuth: {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT'
-      }
-    },
     schemas: {
       RecruitmentRoleRequest: {
         type: 'object',
