@@ -13,6 +13,9 @@ const {
   applyLessonUpdates,
   applyAssetUpdates
 } = require('../services/learningHubService');
+const {
+  normalizeLessonAssetForPlayback
+} = require('../services/learningAssetPlayback');
 
 const router = express.Router();
 
@@ -493,6 +496,41 @@ router.post('/assignments', requireLearningHubWriteAccess, async (req, res) => {
     return res.status(201).json({ count: assignments.length });
   } catch (error) {
     console.error('Failed to assign course', error);
+    return res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+router.get('/lessons/:lessonId/playback', async (req, res) => {
+  const lessonId = toObjectId(req.params.lessonId);
+  if (!lessonId) {
+    return res.status(400).json({ error: 'invalid_lesson_id' });
+  }
+
+  try {
+    const database = getDatabase();
+    const lesson = await database
+      .collection('learningLessons')
+      .findOne({ _id: lessonId });
+
+    if (!lesson) {
+      return res.status(404).json({ error: 'lesson_not_found' });
+    }
+
+    const assets = await database
+      .collection('learningLessonAssets')
+      .find({ lessonId: lessonId.toString() })
+      .toArray();
+
+    const normalizedAssets = await Promise.all(
+      assets.map(asset => normalizeLessonAssetForPlayback(asset))
+    );
+
+    return res.json({
+      lesson: normalizeDocument(lesson),
+      assets: normalizedAssets
+    });
+  } catch (error) {
+    console.error('Failed to load lesson playback', error);
     return res.status(500).json({ error: 'internal_error' });
   }
 });

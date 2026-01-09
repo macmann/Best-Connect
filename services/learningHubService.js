@@ -1,7 +1,12 @@
 const COURSE_STATUSES = new Set(['draft', 'published', 'archived']);
+const EXTERNAL_ASSET_PROVIDERS = new Set(['onedrive', 'youtube']);
 
 function normalizeString(value) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeProvider(value) {
+  return normalizeString(value).toLowerCase();
 }
 
 function normalizeBoolean(value) {
@@ -11,6 +16,95 @@ function normalizeBoolean(value) {
 function normalizeCourseStatus(value) {
   const normalized = normalizeString(value).toLowerCase();
   return COURSE_STATUSES.has(normalized) ? normalized : '';
+}
+
+function parseYouTubeVideoId(value) {
+  const input = normalizeString(value);
+  if (!input) return '';
+
+  try {
+    const parsed = new URL(input);
+    if (parsed.hostname.includes('youtu.be')) {
+      return normalizeString(parsed.pathname.split('/').filter(Boolean)[0]);
+    }
+    if (parsed.hostname.includes('youtube.com')) {
+      const videoId = parsed.searchParams.get('v');
+      if (videoId) return normalizeString(videoId);
+      const pathParts = parsed.pathname.split('/').filter(Boolean);
+      const embedIndex = pathParts.indexOf('embed');
+      if (embedIndex !== -1 && pathParts[embedIndex + 1]) {
+        return normalizeString(pathParts[embedIndex + 1]);
+      }
+    }
+  } catch (error) {
+    if (/^[\w-]{11}$/.test(input)) {
+      return input;
+    }
+  }
+
+  return '';
+}
+
+function buildAssetMetadata(payload = {}, { url, provider } = {}) {
+  const oneDrive = payload.oneDrive && typeof payload.oneDrive === 'object'
+    ? {
+        driveId: normalizeString(payload.oneDrive.driveId),
+        itemId: normalizeString(payload.oneDrive.itemId),
+        shareId: normalizeString(payload.oneDrive.shareId),
+        webUrl: normalizeString(payload.oneDrive.webUrl)
+      }
+    : null;
+  const youtube = payload.youtube && typeof payload.youtube === 'object'
+    ? {
+        videoId: normalizeString(payload.youtube.videoId)
+      }
+    : null;
+  const normalizedProvider = normalizeProvider(provider);
+  const normalizedUrl = normalizeString(url);
+
+  if (normalizedProvider === 'youtube' && normalizedUrl) {
+    const videoId = parseYouTubeVideoId(normalizedUrl);
+    if (videoId && (!youtube || !youtube.videoId)) {
+      if (youtube) {
+        youtube.videoId = videoId;
+      } else {
+        payload.youtube = { videoId };
+      }
+    }
+  }
+
+  if (normalizedProvider === 'onedrive' && normalizedUrl) {
+    if (oneDrive) {
+      if (!oneDrive.webUrl) {
+        oneDrive.webUrl = normalizedUrl;
+      }
+    } else {
+      payload.oneDrive = { webUrl: normalizedUrl };
+    }
+  }
+
+  return {
+    oneDrive: payload.oneDrive && typeof payload.oneDrive === 'object'
+      ? {
+          driveId: normalizeString(payload.oneDrive.driveId),
+          itemId: normalizeString(payload.oneDrive.itemId),
+          shareId: normalizeString(payload.oneDrive.shareId),
+          webUrl: normalizeString(payload.oneDrive.webUrl)
+        }
+      : null,
+    youtube: payload.youtube && typeof payload.youtube === 'object'
+      ? {
+          videoId: normalizeString(payload.youtube.videoId)
+        }
+      : null,
+    mimeType: normalizeString(payload.mimeType),
+    fileName: normalizeString(payload.fileName),
+    fileSize: Number.isFinite(Number(payload.fileSize)) ? Number(payload.fileSize) : null,
+    durationSeconds: Number.isFinite(Number(payload.durationSeconds))
+      ? Number(payload.durationSeconds)
+      : null,
+    thumbnailUrl: normalizeString(payload.thumbnailUrl)
+  };
 }
 
 function buildCourse(payload = {}, { userId } = {}) {
@@ -91,7 +185,9 @@ function buildLesson(payload = {}) {
 function buildLessonAsset(payload = {}) {
   const lessonId = payload.lessonId;
   const provider = normalizeString(payload.provider);
+  const normalizedProvider = normalizeProvider(provider);
   const url = normalizeString(payload.url);
+  const isExternalProvider = EXTERNAL_ASSET_PROVIDERS.has(normalizedProvider);
 
   if (!lessonId) {
     return { error: 'lesson_id_required' };
@@ -99,7 +195,7 @@ function buildLessonAsset(payload = {}) {
   if (!provider) {
     return { error: 'provider_required' };
   }
-  if (!url) {
+  if (!url && !isExternalProvider) {
     return { error: 'url_required' };
   }
 
@@ -108,32 +204,11 @@ function buildLessonAsset(payload = {}) {
     asset: {
       lessonId: String(lessonId),
       provider,
-      url,
+      url: isExternalProvider ? null : url,
       title: normalizeString(payload.title),
       description: normalizeString(payload.description),
       required: normalizeBoolean(payload.required),
-      metadata: {
-        oneDrive: payload.oneDrive && typeof payload.oneDrive === 'object'
-          ? {
-              driveId: normalizeString(payload.oneDrive.driveId),
-              itemId: normalizeString(payload.oneDrive.itemId),
-              shareId: normalizeString(payload.oneDrive.shareId),
-              webUrl: normalizeString(payload.oneDrive.webUrl)
-            }
-          : null,
-        youtube: payload.youtube && typeof payload.youtube === 'object'
-          ? {
-              videoId: normalizeString(payload.youtube.videoId)
-            }
-          : null,
-        mimeType: normalizeString(payload.mimeType),
-        fileName: normalizeString(payload.fileName),
-        fileSize: Number.isFinite(Number(payload.fileSize)) ? Number(payload.fileSize) : null,
-        durationSeconds: Number.isFinite(Number(payload.durationSeconds))
-          ? Number(payload.durationSeconds)
-          : null,
-        thumbnailUrl: normalizeString(payload.thumbnailUrl)
-      },
+      metadata: buildAssetMetadata(payload, { url, provider }),
       createdAt: now,
       updatedAt: now
     }
@@ -319,9 +394,16 @@ function applyLessonUpdates(payload = {}) {
 
 function applyAssetUpdates(payload = {}) {
   const updates = {};
+  const provider = Object.prototype.hasOwnProperty.call(payload, 'provider')
+    ? normalizeString(payload.provider)
+    : '';
+  const normalizedProvider = normalizeProvider(provider);
+  const isExternalProvider = EXTERNAL_ASSET_PROVIDERS.has(normalizedProvider);
+  const url = Object.prototype.hasOwnProperty.call(payload, 'url')
+    ? normalizeString(payload.url)
+    : '';
 
   if (Object.prototype.hasOwnProperty.call(payload, 'provider')) {
-    const provider = normalizeString(payload.provider);
     if (!provider) {
       return { error: 'provider_required' };
     }
@@ -329,11 +411,14 @@ function applyAssetUpdates(payload = {}) {
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, 'url')) {
-    const url = normalizeString(payload.url);
-    if (!url) {
+    if (!url && !isExternalProvider) {
       return { error: 'url_required' };
     }
-    updates.url = url;
+    if (!isExternalProvider) {
+      updates.url = url;
+    } else if (!updates.provider) {
+      updates.url = null;
+    }
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, 'title')) {
@@ -354,29 +439,9 @@ function applyAssetUpdates(payload = {}) {
     || Object.prototype.hasOwnProperty.call(payload, 'fileName')
     || Object.prototype.hasOwnProperty.call(payload, 'fileSize')
     || Object.prototype.hasOwnProperty.call(payload, 'durationSeconds')
-    || Object.prototype.hasOwnProperty.call(payload, 'thumbnailUrl')) {
-    updates.metadata = {
-      oneDrive: payload.oneDrive && typeof payload.oneDrive === 'object'
-        ? {
-            driveId: normalizeString(payload.oneDrive.driveId),
-            itemId: normalizeString(payload.oneDrive.itemId),
-            shareId: normalizeString(payload.oneDrive.shareId),
-            webUrl: normalizeString(payload.oneDrive.webUrl)
-          }
-        : null,
-      youtube: payload.youtube && typeof payload.youtube === 'object'
-        ? {
-            videoId: normalizeString(payload.youtube.videoId)
-          }
-        : null,
-      mimeType: normalizeString(payload.mimeType),
-      fileName: normalizeString(payload.fileName),
-      fileSize: Number.isFinite(Number(payload.fileSize)) ? Number(payload.fileSize) : null,
-      durationSeconds: Number.isFinite(Number(payload.durationSeconds))
-        ? Number(payload.durationSeconds)
-        : null,
-      thumbnailUrl: normalizeString(payload.thumbnailUrl)
-    };
+    || Object.prototype.hasOwnProperty.call(payload, 'thumbnailUrl')
+    || (isExternalProvider && Object.prototype.hasOwnProperty.call(payload, 'url'))) {
+    updates.metadata = buildAssetMetadata(payload, { url, provider });
   }
 
   if (!Object.keys(updates).length) {
