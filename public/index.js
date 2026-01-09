@@ -50,6 +50,12 @@ function isSuperAdmin(roleOrUser) {
   return normalizeRole(role) === 'superadmin';
 }
 
+function isLearningAdminRole(roleOrUser) {
+  const role = typeof roleOrUser === 'string' ? roleOrUser : roleOrUser?.role;
+  const normalized = normalizeRole(role);
+  return ['superadmin', 'hr', 'l&d', 'learning', 'learning & development', 'learning and development', 'ld'].includes(normalized);
+}
+
 function isActiveEmployeeStatus(status) {
   const normalized = typeof status === 'string' ? status.trim().toLowerCase() : '';
   if (!normalized) return true;
@@ -934,6 +940,7 @@ function showPanel(name) {
   const portalBtn   = document.getElementById('tabPortal');
   const performanceBtn = document.getElementById('tabPerformance');
   const learningHubBtn = document.getElementById('tabLearningHub');
+  const learningAdminBtn = document.getElementById('tabLearningAdmin');
   const manageBtn   = document.getElementById('tabManage');
   const recruitmentBtn = document.getElementById('tabRecruitment');
   const managerBtn  = document.getElementById('tabManagerApps');
@@ -945,6 +952,7 @@ function showPanel(name) {
   const portalPanel = document.getElementById('portalPanel');
   const performancePanel = document.getElementById('performancePanel');
   const learningHubPanel = document.getElementById('learningHubPanel');
+  const learningAdminPanel = document.getElementById('learningAdminPanel');
   const managePanel = document.getElementById('managePanel');
   const recruitmentPanel = document.getElementById('recruitmentPanel');
   const managerPanel = document.getElementById('managerAppsPanel');
@@ -953,13 +961,14 @@ function showPanel(name) {
   const settingsPanel = document.getElementById('settingsPanel');
   const financePanel = document.getElementById('financePanel');
 
-  [profileBtn, portalBtn, performanceBtn, learningHubBtn, manageBtn, recruitmentBtn, managerBtn, reportBtn, locationBtn, settingsBtn, financeBtn].forEach(btn =>
+  [profileBtn, portalBtn, performanceBtn, learningHubBtn, learningAdminBtn, manageBtn, recruitmentBtn, managerBtn, reportBtn, locationBtn, settingsBtn, financeBtn].forEach(btn =>
  btn && btn.classList.remove('active-tab'));
 
   if (profilePanel) profilePanel.classList.add('hidden');
   portalPanel.classList.add('hidden');
   if (performancePanel) performancePanel.classList.add('hidden');
   if (learningHubPanel) learningHubPanel.classList.add('hidden');
+  if (learningAdminPanel) learningAdminPanel.classList.add('hidden');
   managePanel.classList.add('hidden');
   recruitmentPanel.classList.add('hidden');
   managerPanel.classList.add('hidden');
@@ -986,6 +995,11 @@ function showPanel(name) {
     learningHubPanel.classList.remove('hidden');
     if (learningHubBtn) learningHubBtn.classList.add('active-tab');
     initLearningHub();
+  }
+  if (name === 'learningAdmin' && learningAdminPanel) {
+    learningAdminPanel.classList.remove('hidden');
+    if (learningAdminBtn) learningAdminBtn.classList.add('active-tab');
+    initLearningAdmin();
   }
   if (name === 'manage') {
     managePanel.classList.remove('hidden');
@@ -1060,9 +1074,11 @@ function toggleTabsByRole() {
   const settingsTab = document.getElementById('tabSettings');
   const financeTab = document.getElementById('tabFinance');
   const learningHubTab = document.getElementById('tabLearningHub');
+  const learningAdminTab = document.getElementById('tabLearningAdmin');
 
   const managerVisible = isManagerRole(currentUser?.role);
   const superAdminVisible = isSuperAdmin(currentUser);
+  const learningAdminVisible = isLearningAdminRole(currentUser?.role);
 
   [manageTab, recruitmentTab, managerAppsTab, leaveReportTab, locationTab, settingsTab].forEach(tab => {
     if (!tab) return;
@@ -1075,6 +1091,10 @@ function toggleTabsByRole() {
 
   if (learningHubTab) {
     learningHubTab.classList.remove('hidden');
+  }
+
+  if (learningAdminTab) {
+    learningAdminTab.classList.toggle('hidden', !learningAdminVisible);
   }
 
   refreshTabGroupVisibility();
@@ -1776,6 +1796,792 @@ function initLearningHub() {
   }
 
   Promise.all([loadLearningHubProgress(), loadLearningHubCourses()]).then(updateLearningHubUI);
+}
+
+// ----------- LEARNING HUB ADMIN -----------
+const learningAdminState = {
+  courses: [],
+  modulesByCourse: new Map(),
+  lessonsByModule: new Map(),
+  selectedCourseId: null,
+  selectedModuleId: null,
+  selectedLessonId: null,
+  employees: [],
+  initialized: false,
+  loading: {
+    courses: false,
+    modules: false,
+    lessons: false,
+    employees: false
+  }
+};
+
+function setLearningAdminStatus(message = '') {
+  const statusEl = document.getElementById('learningAdminStatus');
+  if (!statusEl) return;
+  if (!message) {
+    statusEl.classList.add('hidden');
+    statusEl.textContent = '';
+    return;
+  }
+  statusEl.textContent = message;
+  statusEl.classList.remove('hidden');
+}
+
+function setLearningAdminAccessState(isAllowed) {
+  const gate = document.getElementById('learningAdminGate');
+  const grid = document.getElementById('learningAdminGrid');
+  if (gate) gate.classList.toggle('hidden', isAllowed);
+  if (grid) grid.classList.toggle('hidden', !isAllowed);
+}
+
+function learningAdminFetch(path, options = {}) {
+  const headers = options.headers ? { ...options.headers } : {};
+  if (!headers.Accept) headers.Accept = 'application/json';
+  if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+  return fetch(path, {
+    ...options,
+    headers,
+    credentials: 'include'
+  });
+}
+
+function resetLearningAdminCourseForm() {
+  const form = document.getElementById('learningAdminCourseForm');
+  if (!form) return;
+  form.reset();
+  document.getElementById('learningAdminCourseId').value = '';
+  document.getElementById('learningAdminCourseStatus').value = 'draft';
+}
+
+function resetLearningAdminModuleForm() {
+  const form = document.getElementById('learningAdminModuleForm');
+  if (!form) return;
+  form.reset();
+  document.getElementById('learningAdminModuleId').value = '';
+}
+
+function resetLearningAdminLessonForm() {
+  const form = document.getElementById('learningAdminLessonForm');
+  if (!form) return;
+  form.reset();
+  document.getElementById('learningAdminLessonId').value = '';
+}
+
+function renderLearningAdminCourses() {
+  const list = document.getElementById('learningAdminCourseList');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!learningAdminState.courses.length) {
+    list.innerHTML = '<p class="learning-admin-helper">No courses yet. Create the first course to begin.</p>';
+    return;
+  }
+  learningAdminState.courses.forEach(course => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'learning-admin-item';
+    if (String(course.id) === String(learningAdminState.selectedCourseId)) {
+      button.classList.add('learning-admin-item--active');
+    }
+    button.dataset.courseId = course.id;
+    const status = escapeHtml(course.status || 'draft');
+    const summary = course.summary ? escapeHtml(course.summary) : 'No summary provided.';
+    button.innerHTML = `
+      <div class="learning-admin-item-header">
+        <div class="learning-admin-item-title">
+          <span>${escapeHtml(course.title || 'Untitled course')}</span>
+        </div>
+        <span class="learning-badge">${status}</span>
+      </div>
+      <div class="learning-admin-meta">
+        <span>${summary}</span>
+      </div>
+    `;
+    button.addEventListener('click', () => selectLearningAdminCourse(course.id));
+    list.appendChild(button);
+  });
+}
+
+function renderLearningAdminModules() {
+  const list = document.getElementById('learningAdminModuleList');
+  if (!list) return;
+  list.innerHTML = '';
+  const modules = learningAdminState.modulesByCourse.get(String(learningAdminState.selectedCourseId)) || [];
+  if (!modules.length) {
+    list.innerHTML = '<p class="learning-admin-helper">No modules yet. Add a module to structure the course.</p>';
+    return;
+  }
+  modules.forEach(module => {
+    const item = document.createElement('div');
+    item.className = 'learning-admin-item';
+    item.dataset.moduleId = module.id;
+    item.draggable = true;
+    if (String(module.id) === String(learningAdminState.selectedModuleId)) {
+      item.classList.add('learning-admin-item--active');
+    }
+    const requiredBadge = module.required
+      ? '<span class="learning-badge learning-badge--required">Required</span>'
+      : '<span class="learning-badge learning-badge--optional">Optional</span>';
+    item.innerHTML = `
+      <div class="learning-admin-item-header">
+        <div class="learning-admin-item-title">
+          <span class="learning-admin-drag material-symbols-rounded">drag_indicator</span>
+          <span>${escapeHtml(module.title || 'Untitled module')}</span>
+        </div>
+        ${requiredBadge}
+      </div>
+      <div class="learning-admin-meta">
+        <span>${escapeHtml(module.summary || 'No summary')}</span>
+      </div>
+    `;
+    item.addEventListener('click', () => selectLearningAdminModule(module.id));
+    list.appendChild(item);
+  });
+}
+
+function renderLearningAdminLessons() {
+  const list = document.getElementById('learningAdminLessonList');
+  if (!list) return;
+  list.innerHTML = '';
+  const lessons = learningAdminState.lessonsByModule.get(String(learningAdminState.selectedModuleId)) || [];
+  if (!lessons.length) {
+    list.innerHTML = '<p class="learning-admin-helper">No lessons yet. Add a lesson to begin.</p>';
+    return;
+  }
+  lessons.forEach(lesson => {
+    const item = document.createElement('div');
+    item.className = 'learning-admin-item';
+    item.dataset.lessonId = lesson.id;
+    item.draggable = true;
+    if (String(lesson.id) === String(learningAdminState.selectedLessonId)) {
+      item.classList.add('learning-admin-item--active');
+    }
+    const requiredBadge = lesson.required
+      ? '<span class="learning-badge learning-badge--required">Required</span>'
+      : '<span class="learning-badge learning-badge--optional">Optional</span>';
+    item.innerHTML = `
+      <div class="learning-admin-item-header">
+        <div class="learning-admin-item-title">
+          <span class="learning-admin-drag material-symbols-rounded">drag_indicator</span>
+          <span>${escapeHtml(lesson.title || 'Untitled lesson')}</span>
+        </div>
+        ${requiredBadge}
+      </div>
+      <div class="learning-admin-meta">
+        <span>${escapeHtml(lesson.summary || 'No summary')}</span>
+      </div>
+    `;
+    item.addEventListener('click', () => selectLearningAdminLesson(lesson.id));
+    list.appendChild(item);
+  });
+}
+
+function renderLearningAdminAssets() {
+  const list = document.getElementById('learningAdminAssetList');
+  if (!list) return;
+  list.innerHTML = '';
+  const lesson = resolveLearningAdminLesson();
+  const assets = lesson?.assets || [];
+  if (!assets.length) {
+    list.innerHTML = '<p class="learning-admin-helper">No assets attached yet.</p>';
+    return;
+  }
+  assets.forEach(asset => {
+    const item = document.createElement('div');
+    item.className = 'learning-admin-asset-item';
+    const label = escapeHtml(asset.label || asset.name || 'Untitled asset');
+    const type = escapeHtml(asset.type || 'asset');
+    const url = escapeHtml(asset.url || asset.link || '#');
+    item.innerHTML = `
+      <strong>${label}</strong>
+      <span class="learning-admin-meta">${type}</span>
+      <a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>
+    `;
+    list.appendChild(item);
+  });
+}
+
+function populateLearningAdminCourseForm(course) {
+  if (!course) return;
+  document.getElementById('learningAdminCourseId').value = course.id || '';
+  document.getElementById('learningAdminCourseTitle').value = course.title || '';
+  document.getElementById('learningAdminCourseSummary').value = course.summary || '';
+  document.getElementById('learningAdminCourseDescription').value = course.description || '';
+  document.getElementById('learningAdminCourseStatus').value = course.status || 'draft';
+}
+
+function populateLearningAdminModuleForm(module) {
+  if (!module) return;
+  document.getElementById('learningAdminModuleId').value = module.id || '';
+  document.getElementById('learningAdminModuleTitle').value = module.title || '';
+  document.getElementById('learningAdminModuleSummary').value = module.summary || '';
+  document.getElementById('learningAdminModuleDescription').value = module.description || '';
+  document.getElementById('learningAdminModuleRequired').checked = Boolean(module.required);
+}
+
+function populateLearningAdminLessonForm(lesson) {
+  if (!lesson) return;
+  document.getElementById('learningAdminLessonId').value = lesson.id || '';
+  document.getElementById('learningAdminLessonTitle').value = lesson.title || '';
+  document.getElementById('learningAdminLessonSummary').value = lesson.summary || '';
+  document.getElementById('learningAdminLessonDescription').value = lesson.description || '';
+  document.getElementById('learningAdminLessonRequired').checked = Boolean(lesson.required);
+}
+
+function updateLearningAdminAssignmentOptions() {
+  const courseSelect = document.getElementById('learningAdminAssignmentCourse');
+  if (!courseSelect) return;
+  courseSelect.innerHTML = '<option value="">-- select course --</option>';
+  learningAdminState.courses.forEach(course => {
+    courseSelect.add(new Option(course.title || `Course ${course.id}`, course.id));
+  });
+  if (learningAdminState.selectedCourseId) {
+    courseSelect.value = learningAdminState.selectedCourseId;
+  }
+}
+
+function updateLearningAdminEmployeesSelect() {
+  const select = document.getElementById('learningAdminAssignmentEmployees');
+  if (!select) return;
+  select.innerHTML = '';
+  learningAdminState.employees.forEach(emp => {
+    select.add(new Option(emp.name || emp.fullName || `Employee ${emp.id}`, emp.id));
+  });
+}
+
+function resolveLearningAdminLesson() {
+  if (!learningAdminState.selectedLessonId) return null;
+  const lessons = learningAdminState.lessonsByModule.get(String(learningAdminState.selectedModuleId)) || [];
+  return lessons.find(item => String(item.id) === String(learningAdminState.selectedLessonId)) || null;
+}
+
+async function loadLearningAdminCourses() {
+  if (learningAdminState.loading.courses) return;
+  learningAdminState.loading.courses = true;
+  try {
+    const res = await learningAdminFetch('/api/learning-hub/courses');
+    if (res.status === 401 || res.status === 403) {
+      setLearningAdminStatus('Access denied. Please sign in with HR/L&D credentials.');
+      return;
+    }
+    const data = await res.json();
+    const rawCourses = Array.isArray(data) ? data : data.courses || [];
+    learningAdminState.courses = normalizeLearningItems(rawCourses, ['id', 'courseId', '_id']);
+    if (!learningAdminState.courses.length) {
+      learningAdminState.selectedCourseId = null;
+      learningAdminState.selectedModuleId = null;
+      learningAdminState.selectedLessonId = null;
+    } else if (!learningAdminState.selectedCourseId) {
+      learningAdminState.selectedCourseId = learningAdminState.courses[0].id;
+    }
+    renderLearningAdminCourses();
+    updateLearningAdminAssignmentOptions();
+    if (learningAdminState.selectedCourseId) {
+      await loadLearningAdminModules(learningAdminState.selectedCourseId);
+    }
+  } catch (error) {
+    console.error('Failed to load learning admin courses', error);
+    setLearningAdminStatus('Unable to load courses. Please try again.');
+  } finally {
+    learningAdminState.loading.courses = false;
+  }
+}
+
+async function loadLearningAdminModules(courseId) {
+  if (!courseId || learningAdminState.loading.modules) return;
+  learningAdminState.loading.modules = true;
+  try {
+    const res = await learningAdminFetch(`/api/learning-hub/courses/${courseId}/modules`);
+    if (res.status === 401 || res.status === 403) {
+      setLearningAdminStatus('Access denied. Please sign in with HR/L&D credentials.');
+      return;
+    }
+    const data = await res.json();
+    const rawModules = Array.isArray(data) ? data : data.modules || [];
+    const modules = normalizeLearningItems(rawModules, ['id', 'moduleId', '_id']);
+    learningAdminState.modulesByCourse.set(String(courseId), modules);
+    learningAdminState.selectedModuleId = modules[0]?.id || null;
+    renderLearningAdminModules();
+    if (learningAdminState.selectedModuleId) {
+      await loadLearningAdminLessons(learningAdminState.selectedModuleId);
+    } else {
+      learningAdminState.selectedLessonId = null;
+      renderLearningAdminLessons();
+      renderLearningAdminAssets();
+    }
+  } catch (error) {
+    console.error('Failed to load learning admin modules', error);
+    setLearningAdminStatus('Unable to load modules. Please try again.');
+  } finally {
+    learningAdminState.loading.modules = false;
+  }
+}
+
+async function loadLearningAdminLessons(moduleId) {
+  if (!moduleId || learningAdminState.loading.lessons) return;
+  learningAdminState.loading.lessons = true;
+  try {
+    const res = await learningAdminFetch(`/api/learning-hub/modules/${moduleId}/lessons`);
+    if (res.status === 401 || res.status === 403) {
+      setLearningAdminStatus('Access denied. Please sign in with HR/L&D credentials.');
+      return;
+    }
+    const data = await res.json();
+    const rawLessons = Array.isArray(data) ? data : data.lessons || [];
+    const lessons = normalizeLearningItems(rawLessons, ['id', 'lessonId', '_id']);
+    learningAdminState.lessonsByModule.set(String(moduleId), lessons);
+    learningAdminState.selectedLessonId = lessons[0]?.id || null;
+    renderLearningAdminLessons();
+    renderLearningAdminAssets();
+  } catch (error) {
+    console.error('Failed to load learning admin lessons', error);
+    setLearningAdminStatus('Unable to load lessons. Please try again.');
+  } finally {
+    learningAdminState.loading.lessons = false;
+  }
+}
+
+async function loadLearningAdminEmployees() {
+  if (learningAdminState.loading.employees) return;
+  learningAdminState.loading.employees = true;
+  try {
+    const employees = await getJSON('/employees');
+    learningAdminState.employees = Array.isArray(employees) ? employees : [];
+    updateLearningAdminEmployeesSelect();
+  } catch (error) {
+    console.error('Failed to load employee list for learning admin', error);
+  } finally {
+    learningAdminState.loading.employees = false;
+  }
+}
+
+function selectLearningAdminCourse(courseId) {
+  learningAdminState.selectedCourseId = courseId;
+  const course = learningAdminState.courses.find(item => String(item.id) === String(courseId));
+  if (course) {
+    populateLearningAdminCourseForm(course);
+  }
+  renderLearningAdminCourses();
+  updateLearningAdminAssignmentOptions();
+  if (courseId) {
+    loadLearningAdminModules(courseId);
+  }
+}
+
+function selectLearningAdminModule(moduleId) {
+  learningAdminState.selectedModuleId = moduleId;
+  const modules = learningAdminState.modulesByCourse.get(String(learningAdminState.selectedCourseId)) || [];
+  const module = modules.find(item => String(item.id) === String(moduleId));
+  if (module) {
+    populateLearningAdminModuleForm(module);
+  }
+  renderLearningAdminModules();
+  if (moduleId) {
+    loadLearningAdminLessons(moduleId);
+  }
+}
+
+function selectLearningAdminLesson(lessonId) {
+  learningAdminState.selectedLessonId = lessonId;
+  const lessons = learningAdminState.lessonsByModule.get(String(learningAdminState.selectedModuleId)) || [];
+  const lesson = lessons.find(item => String(item.id) === String(lessonId));
+  if (lesson) {
+    populateLearningAdminLessonForm(lesson);
+  }
+  renderLearningAdminLessons();
+  renderLearningAdminAssets();
+}
+
+function syncLearningAdminOrder(listEl, type) {
+  if (!listEl) return [];
+  const ids = [...listEl.querySelectorAll('[data-module-id], [data-lesson-id]')].map(el =>
+    type === 'modules' ? el.dataset.moduleId : el.dataset.lessonId
+  );
+  if (!ids.length) return [];
+  if (type === 'modules') {
+    const modules = learningAdminState.modulesByCourse.get(String(learningAdminState.selectedCourseId)) || [];
+    const ordered = ids.map(id => modules.find(item => String(item.id) === String(id))).filter(Boolean);
+    learningAdminState.modulesByCourse.set(String(learningAdminState.selectedCourseId), ordered);
+    return ordered;
+  }
+  const lessons = learningAdminState.lessonsByModule.get(String(learningAdminState.selectedModuleId)) || [];
+  const ordered = ids.map(id => lessons.find(item => String(item.id) === String(id))).filter(Boolean);
+  learningAdminState.lessonsByModule.set(String(learningAdminState.selectedModuleId), ordered);
+  return ordered;
+}
+
+async function persistLearningAdminModuleOrder() {
+  const courseId = learningAdminState.selectedCourseId;
+  const modules = learningAdminState.modulesByCourse.get(String(courseId)) || [];
+  if (!modules.length) return;
+  try {
+    const responses = await Promise.all(modules.map((module, index) =>
+      learningAdminFetch('/api/learning-hub/modules', {
+        method: 'PUT',
+        body: JSON.stringify({
+          id: module.id,
+          courseId,
+          order: index + 1
+        })
+      })
+    ));
+    if (responses.some(res => res.status === 401 || res.status === 403)) {
+      setLearningAdminStatus('Access denied. Please sign in with HR/L&D credentials.');
+      return;
+    }
+    if (responses.some(res => !res.ok)) {
+      setLearningAdminStatus('Unable to save module ordering.');
+    }
+  } catch (error) {
+    console.error('Failed to persist module order', error);
+    setLearningAdminStatus('Unable to save module ordering.');
+  }
+}
+
+async function persistLearningAdminLessonOrder() {
+  const moduleId = learningAdminState.selectedModuleId;
+  const lessons = learningAdminState.lessonsByModule.get(String(moduleId)) || [];
+  if (!lessons.length) return;
+  try {
+    const responses = await Promise.all(lessons.map((lesson, index) =>
+      learningAdminFetch('/api/learning-hub/lessons', {
+        method: 'PUT',
+        body: JSON.stringify({
+          id: lesson.id,
+          moduleId,
+          order: index + 1
+        })
+      })
+    ));
+    if (responses.some(res => res.status === 401 || res.status === 403)) {
+      setLearningAdminStatus('Access denied. Please sign in with HR/L&D credentials.');
+      return;
+    }
+    if (responses.some(res => !res.ok)) {
+      setLearningAdminStatus('Unable to save lesson ordering.');
+    }
+  } catch (error) {
+    console.error('Failed to persist lesson order', error);
+    setLearningAdminStatus('Unable to save lesson ordering.');
+  }
+}
+
+function enableLearningAdminDrag(listEl, type) {
+  if (!listEl) return;
+  let draggedItem = null;
+  listEl.addEventListener('dragstart', event => {
+    const target = event.target.closest('.learning-admin-item');
+    if (!target) return;
+    draggedItem = target;
+    target.classList.add('is-dragging');
+    event.dataTransfer.effectAllowed = 'move';
+  });
+  listEl.addEventListener('dragover', event => {
+    event.preventDefault();
+    const target = event.target.closest('.learning-admin-item');
+    if (!target || target === draggedItem) return;
+    const rect = target.getBoundingClientRect();
+    const shouldPlaceAfter = (event.clientY - rect.top) > rect.height / 2;
+    if (shouldPlaceAfter) {
+      target.after(draggedItem);
+    } else {
+      target.before(draggedItem);
+    }
+  });
+  listEl.addEventListener('drop', event => {
+    event.preventDefault();
+    if (!draggedItem) return;
+    draggedItem.classList.remove('is-dragging');
+    const ordered = syncLearningAdminOrder(listEl, type);
+    if (type === 'modules') {
+      renderLearningAdminModules();
+      persistLearningAdminModuleOrder(ordered);
+    } else {
+      renderLearningAdminLessons();
+      persistLearningAdminLessonOrder(ordered);
+    }
+    draggedItem = null;
+  });
+  listEl.addEventListener('dragend', () => {
+    if (draggedItem) {
+      draggedItem.classList.remove('is-dragging');
+    }
+    draggedItem = null;
+  });
+}
+
+async function onLearningAdminCourseSubmit(event) {
+  event.preventDefault();
+  const id = document.getElementById('learningAdminCourseId').value;
+  const payload = {
+    id: id || undefined,
+    title: document.getElementById('learningAdminCourseTitle').value.trim(),
+    summary: document.getElementById('learningAdminCourseSummary').value.trim(),
+    description: document.getElementById('learningAdminCourseDescription').value.trim(),
+    status: document.getElementById('learningAdminCourseStatus').value
+  };
+  if (!payload.title) {
+    setLearningAdminStatus('Course title is required.');
+    return;
+  }
+  try {
+    const res = await learningAdminFetch('/api/learning-hub/courses', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify(payload)
+    });
+    if (res.status === 401 || res.status === 403) {
+      setLearningAdminStatus('Access denied. Please sign in with HR/L&D credentials.');
+      return;
+    }
+    await loadLearningAdminCourses();
+    setLearningAdminStatus('');
+  } catch (error) {
+    console.error('Failed to save course', error);
+    setLearningAdminStatus('Unable to save course.');
+  }
+}
+
+async function onLearningAdminCourseAction(action) {
+  const courseId = document.getElementById('learningAdminCourseId').value;
+  if (!courseId) {
+    setLearningAdminStatus('Select a course first.');
+    return;
+  }
+  try {
+    const res = await learningAdminFetch(`/api/learning-hub/courses/${courseId}/${action}`, {
+      method: 'PATCH'
+    });
+    if (res.status === 401 || res.status === 403) {
+      setLearningAdminStatus('Access denied. Please sign in with HR/L&D credentials.');
+      return;
+    }
+    await loadLearningAdminCourses();
+    setLearningAdminStatus('');
+  } catch (error) {
+    console.error(`Failed to ${action} course`, error);
+    setLearningAdminStatus(`Unable to ${action} course.`);
+  }
+}
+
+async function onLearningAdminModuleSubmit(event) {
+  event.preventDefault();
+  if (!learningAdminState.selectedCourseId) {
+    setLearningAdminStatus('Select a course before adding modules.');
+    return;
+  }
+  const id = document.getElementById('learningAdminModuleId').value;
+  const payload = {
+    id: id || undefined,
+    courseId: learningAdminState.selectedCourseId,
+    title: document.getElementById('learningAdminModuleTitle').value.trim(),
+    summary: document.getElementById('learningAdminModuleSummary').value.trim(),
+    description: document.getElementById('learningAdminModuleDescription').value.trim(),
+    required: document.getElementById('learningAdminModuleRequired').checked
+  };
+  if (!payload.title) {
+    setLearningAdminStatus('Module title is required.');
+    return;
+  }
+  try {
+    const res = await learningAdminFetch('/api/learning-hub/modules', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify(payload)
+    });
+    if (res.status === 401 || res.status === 403) {
+      setLearningAdminStatus('Access denied. Please sign in with HR/L&D credentials.');
+      return;
+    }
+    await loadLearningAdminModules(learningAdminState.selectedCourseId);
+    setLearningAdminStatus('');
+  } catch (error) {
+    console.error('Failed to save module', error);
+    setLearningAdminStatus('Unable to save module.');
+  }
+}
+
+async function onLearningAdminLessonSubmit(event) {
+  event.preventDefault();
+  if (!learningAdminState.selectedModuleId) {
+    setLearningAdminStatus('Select a module before adding lessons.');
+    return;
+  }
+  const id = document.getElementById('learningAdminLessonId').value;
+  const payload = {
+    id: id || undefined,
+    moduleId: learningAdminState.selectedModuleId,
+    title: document.getElementById('learningAdminLessonTitle').value.trim(),
+    summary: document.getElementById('learningAdminLessonSummary').value.trim(),
+    description: document.getElementById('learningAdminLessonDescription').value.trim(),
+    required: document.getElementById('learningAdminLessonRequired').checked
+  };
+  if (!payload.title) {
+    setLearningAdminStatus('Lesson title is required.');
+    return;
+  }
+  try {
+    const res = await learningAdminFetch('/api/learning-hub/lessons', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify(payload)
+    });
+    if (res.status === 401 || res.status === 403) {
+      setLearningAdminStatus('Access denied. Please sign in with HR/L&D credentials.');
+      return;
+    }
+    await loadLearningAdminLessons(learningAdminState.selectedModuleId);
+    setLearningAdminStatus('');
+  } catch (error) {
+    console.error('Failed to save lesson', error);
+    setLearningAdminStatus('Unable to save lesson.');
+  }
+}
+
+async function onLearningAdminAssetSubmit(event) {
+  event.preventDefault();
+  if (!learningAdminState.selectedLessonId) {
+    setLearningAdminStatus('Select a lesson before attaching assets.');
+    return;
+  }
+  const payload = {
+    lessonId: learningAdminState.selectedLessonId,
+    label: document.getElementById('learningAdminAssetLabel').value.trim(),
+    type: document.getElementById('learningAdminAssetType').value,
+    url: document.getElementById('learningAdminAssetUrl').value.trim()
+  };
+  if (!payload.url) {
+    setLearningAdminStatus('Asset URL is required.');
+    return;
+  }
+  try {
+    const res = await learningAdminFetch('/api/learning-hub/assets', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    if (res.status === 401 || res.status === 403) {
+      setLearningAdminStatus('Access denied. Please sign in with HR/L&D credentials.');
+      return;
+    }
+    const lesson = resolveLearningAdminLesson();
+    if (lesson) {
+      if (!Array.isArray(lesson.assets)) lesson.assets = [];
+      lesson.assets.push(payload);
+    }
+    document.getElementById('learningAdminAssetForm').reset();
+    renderLearningAdminAssets();
+    setLearningAdminStatus('');
+  } catch (error) {
+    console.error('Failed to add lesson asset', error);
+    setLearningAdminStatus('Unable to add lesson asset.');
+  }
+}
+
+async function onLearningAdminAssignmentSubmit(event) {
+  event.preventDefault();
+  const courseId = document.getElementById('learningAdminAssignmentCourse').value || learningAdminState.selectedCourseId;
+  if (!courseId) {
+    setLearningAdminStatus('Select a course to assign.');
+    return;
+  }
+  const roleValue = document.getElementById('learningAdminAssignmentRole').value;
+  const employeeSelect = document.getElementById('learningAdminAssignmentEmployees');
+  const employeeIds = employeeSelect ? Array.from(employeeSelect.selectedOptions).map(opt => opt.value) : [];
+  if (!roleValue && !employeeIds.length) {
+    setLearningAdminStatus('Select a role or employees for assignment.');
+    return;
+  }
+  const payload = {
+    courseId,
+    roles: roleValue ? [roleValue] : [],
+    employees: employeeIds
+  };
+  try {
+    const res = await learningAdminFetch('/api/learning-hub/assignments', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    if (res.status === 401 || res.status === 403) {
+      setLearningAdminStatus('Access denied. Please sign in with HR/L&D credentials.');
+      return;
+    }
+    setLearningAdminStatus('Assignments saved.');
+  } catch (error) {
+    console.error('Failed to save assignments', error);
+    setLearningAdminStatus('Unable to save assignments.');
+  }
+}
+
+function initLearningAdmin() {
+  if (learningAdminState.initialized) return;
+  learningAdminState.initialized = true;
+  const hasAccess = isLearningAdminRole(currentUser?.role);
+  setLearningAdminAccessState(hasAccess);
+  if (!hasAccess) {
+    setLearningAdminStatus('Access denied. Please sign in with HR/L&D credentials.');
+    return;
+  }
+
+  const courseForm = document.getElementById('learningAdminCourseForm');
+  const moduleForm = document.getElementById('learningAdminModuleForm');
+  const lessonForm = document.getElementById('learningAdminLessonForm');
+  const assetForm = document.getElementById('learningAdminAssetForm');
+  const assignmentForm = document.getElementById('learningAdminAssignmentForm');
+  const newCourseBtn = document.getElementById('learningAdminNewCourse');
+  const newModuleBtn = document.getElementById('learningAdminNewModule');
+  const newLessonBtn = document.getElementById('learningAdminNewLesson');
+  const publishBtn = document.getElementById('learningAdminPublishCourse');
+  const archiveBtn = document.getElementById('learningAdminArchiveCourse');
+  const moduleList = document.getElementById('learningAdminModuleList');
+  const lessonList = document.getElementById('learningAdminLessonList');
+  const assignmentCourseSelect = document.getElementById('learningAdminAssignmentCourse');
+
+  if (courseForm) courseForm.addEventListener('submit', onLearningAdminCourseSubmit);
+  if (moduleForm) moduleForm.addEventListener('submit', onLearningAdminModuleSubmit);
+  if (lessonForm) lessonForm.addEventListener('submit', onLearningAdminLessonSubmit);
+  if (assetForm) assetForm.addEventListener('submit', onLearningAdminAssetSubmit);
+  if (assignmentForm) assignmentForm.addEventListener('submit', onLearningAdminAssignmentSubmit);
+  if (newCourseBtn) newCourseBtn.addEventListener('click', () => {
+    learningAdminState.selectedCourseId = null;
+    learningAdminState.selectedModuleId = null;
+    learningAdminState.selectedLessonId = null;
+    resetLearningAdminCourseForm();
+    renderLearningAdminCourses();
+    updateLearningAdminAssignmentOptions();
+    renderLearningAdminModules();
+    renderLearningAdminLessons();
+    renderLearningAdminAssets();
+  });
+  if (newModuleBtn) newModuleBtn.addEventListener('click', () => {
+    learningAdminState.selectedModuleId = null;
+    learningAdminState.selectedLessonId = null;
+    resetLearningAdminModuleForm();
+    renderLearningAdminModules();
+    renderLearningAdminLessons();
+    renderLearningAdminAssets();
+  });
+  if (newLessonBtn) newLessonBtn.addEventListener('click', () => {
+    learningAdminState.selectedLessonId = null;
+    resetLearningAdminLessonForm();
+    renderLearningAdminLessons();
+    renderLearningAdminAssets();
+  });
+  if (publishBtn) publishBtn.addEventListener('click', () => onLearningAdminCourseAction('publish'));
+  if (archiveBtn) archiveBtn.addEventListener('click', () => onLearningAdminCourseAction('archive'));
+  if (assignmentCourseSelect) {
+    assignmentCourseSelect.addEventListener('change', event => {
+      const courseId = event.target.value;
+      if (courseId) {
+        selectLearningAdminCourse(courseId);
+      }
+    });
+  }
+
+  enableLearningAdminDrag(moduleList, 'modules');
+  enableLearningAdminDrag(lessonList, 'lessons');
+
+  resetLearningAdminCourseForm();
+  resetLearningAdminModuleForm();
+  resetLearningAdminLessonForm();
+  loadLearningAdminCourses();
+  loadLearningAdminEmployees();
 }
 
 // ----------- PERFORMANCE REVIEW -----------
@@ -6611,6 +7417,8 @@ async function init() {
   if (performanceTab) performanceTab.onclick = () => showPanel('performance');
   const learningHubTab = document.getElementById('tabLearningHub');
   if (learningHubTab) learningHubTab.onclick = () => showPanel('learningHub');
+  const learningAdminTab = document.getElementById('tabLearningAdmin');
+  if (learningAdminTab) learningAdminTab.onclick = () => showPanel('learningAdmin');
   document.getElementById('tabManage').onclick = () => showPanel('manage');
   const recruitmentTab = document.getElementById('tabRecruitment');
   if (recruitmentTab) recruitmentTab.onclick = () => showPanel('recruitment');
