@@ -240,7 +240,13 @@ const db = {
         holidays,
         settingsDocs,
         salaries,
-        performanceReviews
+        performanceReviews,
+        learningCourses,
+        learningModules,
+        learningLessons,
+        learningLessonAssets,
+        learningCourseAssignments,
+        learningProgress
       ] = await Promise.all([
         fetchCollection('employees'),
         fetchCollection('applications'),
@@ -250,7 +256,13 @@ const db = {
         fetchCollection('holidays'),
         fetchCollection('settings'),
         fetchCollection('salaries'),
-        fetchCollection('performanceReviews')
+        fetchCollection('performanceReviews'),
+        fetchCollection('learningCourses'),
+        fetchCollection('learningModules'),
+        fetchCollection('learningLessons'),
+        fetchCollection('learningLessonAssets'),
+        fetchCollection('learningCourseAssignments'),
+        fetchCollection('learningProgress')
       ]);
       const recruitmentApplications = Array.isArray(applications)
         ? applications.filter(app => app && app.type === 'recruitment')
@@ -274,7 +286,13 @@ const db = {
         holidays,
         settings,
         salaries,
-        performanceReviews
+        performanceReviews,
+        learningCourses,
+        learningModules,
+        learningLessons,
+        learningLessonAssets,
+        learningCourseAssignments,
+        learningProgress
       };
       lastLoadedAt = Date.now();
       logDbTrace('DB read completed', {
@@ -301,7 +319,13 @@ const db = {
       holidays = [],
       settings = {},
       salaries = [],
-      performanceReviews = []
+      performanceReviews = [],
+      learningCourses = [],
+      learningModules = [],
+      learningLessons = [],
+      learningLessonAssets = [],
+      learningCourseAssignments = [],
+      learningProgress = []
     } = this.data;
 
     const mergedApplications = [
@@ -318,7 +342,13 @@ const db = {
       syncCollection('holidays', holidays),
       syncSettings(settings),
       syncCollection('salaries', salaries),
-      syncCollection('performanceReviews', performanceReviews)
+      syncCollection('performanceReviews', performanceReviews),
+      syncCollection('learningCourses', learningCourses),
+      syncCollection('learningModules', learningModules),
+      syncCollection('learningLessons', learningLessons),
+      syncCollection('learningLessonAssets', learningLessonAssets),
+      syncCollection('learningCourseAssignments', learningCourseAssignments),
+      syncCollection('learningProgress', learningProgress)
     ]);
     lastLoadedAt = Date.now();
   },
