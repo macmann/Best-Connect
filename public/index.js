@@ -2152,6 +2152,12 @@ async function loadLearningAdminCourses() {
     } else if (!learningAdminState.selectedCourseId) {
       learningAdminState.selectedCourseId = learningAdminState.courses[0].id;
     }
+    const selectedCourse = learningAdminState.courses.find(item => String(item.id) === String(learningAdminState.selectedCourseId));
+    if (selectedCourse) {
+      populateLearningAdminCourseForm(selectedCourse);
+    } else {
+      resetLearningAdminCourseForm();
+    }
     renderLearningAdminCourses();
     updateLearningAdminAssignmentOptions();
     if (learningAdminState.selectedCourseId) {
@@ -2179,11 +2185,18 @@ async function loadLearningAdminModules(courseId) {
     const modules = normalizeLearningItems(rawModules, ['id', 'moduleId', '_id']);
     learningAdminState.modulesByCourse.set(String(courseId), modules);
     learningAdminState.selectedModuleId = modules[0]?.id || null;
+    const selectedModule = modules.find(item => String(item.id) === String(learningAdminState.selectedModuleId));
+    if (selectedModule) {
+      populateLearningAdminModuleForm(selectedModule);
+    } else {
+      resetLearningAdminModuleForm();
+    }
     renderLearningAdminModules();
     if (learningAdminState.selectedModuleId) {
       await loadLearningAdminLessons(learningAdminState.selectedModuleId);
     } else {
       learningAdminState.selectedLessonId = null;
+      resetLearningAdminLessonForm();
       renderLearningAdminLessons();
       renderLearningAdminAssets();
     }
@@ -2209,6 +2222,12 @@ async function loadLearningAdminLessons(moduleId) {
     const lessons = normalizeLearningItems(rawLessons, ['id', 'lessonId', '_id']);
     learningAdminState.lessonsByModule.set(String(moduleId), lessons);
     learningAdminState.selectedLessonId = lessons[0]?.id || null;
+    const selectedLesson = lessons.find(item => String(item.id) === String(learningAdminState.selectedLessonId));
+    if (selectedLesson) {
+      populateLearningAdminLessonForm(selectedLesson);
+    } else {
+      resetLearningAdminLessonForm();
+    }
     renderLearningAdminLessons();
     if (learningAdminState.selectedLessonId) {
       await loadLearningAdminAssets(learningAdminState.selectedLessonId);
