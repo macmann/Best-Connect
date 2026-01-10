@@ -1338,6 +1338,13 @@
   gap: 8px;
 }
 
+.learning-header-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
 .learning-badge {
   display: inline-flex;
   align-items: center;
@@ -1359,6 +1366,25 @@
 .learning-badge--required {
   background: rgba(249, 115, 22, 0.12);
   color: #c2410c;
+}
+
+.learning-badge--status {
+  text-transform: none;
+}
+
+.learning-badge--status-completed {
+  background: rgba(34, 197, 94, 0.12);
+  color: #15803d;
+}
+
+.learning-badge--status-progress {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+}
+
+.learning-badge--status-not-started {
+  background: rgba(148, 163, 184, 0.2);
+  color: #475569;
 }
 
 .learning-progress-inline {

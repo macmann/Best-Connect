@@ -1341,6 +1341,12 @@ function resolveLessonProgress(lessonId) {
   return 0;
 }
 
+function resolveProgressStatus(progress) {
+  if (progress >= 100) return 'Completed';
+  if (progress > 0) return 'In progress';
+  return 'Not started';
+}
+
 function calculateModuleProgressFromLessons(moduleId) {
   const lessons = learningHubState.lessonsByModule.get(String(moduleId)) || [];
   const values = lessons
@@ -1375,6 +1381,17 @@ function buildRequirementBadge(isRequired) {
   const badge = document.createElement('span');
   badge.className = `learning-badge ${isRequired ? 'learning-badge--required' : 'learning-badge--optional'}`;
   badge.textContent = isRequired ? 'Required' : 'Optional';
+  return badge;
+}
+
+function buildStatusBadge(status) {
+  const badge = document.createElement('span');
+  const normalized = (status || '').toLowerCase();
+  let variant = 'not-started';
+  if (normalized === 'completed') variant = 'completed';
+  if (normalized === 'in progress') variant = 'progress';
+  badge.className = `learning-badge learning-badge--status learning-badge--status-${variant}`;
+  badge.textContent = status;
   return badge;
 }
 
@@ -1417,7 +1434,8 @@ function renderCourseList() {
     const meta = document.createElement('div');
     meta.className = 'learning-list-meta';
     const progress = resolveCourseProgress(course.id);
-    meta.textContent = `${progress}% complete`;
+    const statusLabel = resolveProgressStatus(progress);
+    meta.innerHTML = `<span>${statusLabel}</span><span>•</span><span>${progress}% complete</span>`;
 
     const status = document.createElement('div');
     status.className = 'learning-progress-inline';
@@ -1441,6 +1459,14 @@ function renderCourseDetails() {
     title.textContent = course
       ? (course.title || course.name || 'Course details')
       : 'Select a course to view modules and lessons.';
+  }
+  const badges = document.getElementById('learningCourseBadges');
+  if (badges) {
+    badges.innerHTML = '';
+    if (course) {
+      badges.appendChild(buildRequirementBadge(course.required ?? course.isRequired ?? course.assignmentRequired));
+      badges.appendChild(buildStatusBadge(resolveProgressStatus(resolveCourseProgress(course.id))));
+    }
   }
   if (meta) {
     meta.innerHTML = '';
@@ -1481,15 +1507,17 @@ function renderModuleList() {
 
     const meta = document.createElement('div');
     meta.className = 'learning-list-meta';
-    meta.textContent = `${resolveModuleProgress(module.id)}% complete`;
+    const progress = resolveModuleProgress(module.id);
+    const statusLabel = resolveProgressStatus(progress);
+    meta.innerHTML = `<span>${statusLabel}</span><span>•</span><span>${progress}% complete</span>`;
 
     const status = document.createElement('div');
     status.className = 'learning-progress-inline';
     status.innerHTML = `
       <div class="learning-progress-bar">
-        <div class="learning-progress-fill" style="width: ${resolveModuleProgress(module.id)}%;"></div>
+        <div class="learning-progress-fill" style="width: ${progress}%;"></div>
       </div>
-      <span class="learning-progress-text">${resolveModuleProgress(module.id)}%</span>
+      <span class="learning-progress-text">${progress}%</span>
     `;
 
     button.append(title, meta, status);
@@ -1521,15 +1549,16 @@ function renderLessonList() {
 
     const meta = document.createElement('div');
     meta.className = 'learning-list-meta';
-    meta.textContent = `${resolveLessonStatus(lesson.id)} • ${resolveLessonProgress(lesson.id)}%`;
+    const progress = resolveLessonProgress(lesson.id);
+    meta.textContent = `${resolveLessonStatus(lesson.id)} • ${progress}%`;
 
     const status = document.createElement('div');
     status.className = 'learning-progress-inline';
     status.innerHTML = `
       <div class="learning-progress-bar">
-        <div class="learning-progress-fill" style="width: ${resolveLessonProgress(lesson.id)}%;"></div>
+        <div class="learning-progress-fill" style="width: ${progress}%;"></div>
       </div>
-      <span class="learning-progress-text">${resolveLessonProgress(lesson.id)}%</span>
+      <span class="learning-progress-text">${progress}%</span>
     `;
 
     button.append(title, meta, status);
@@ -1544,6 +1573,14 @@ function renderLessonPlayer() {
     title.textContent = lesson
       ? (lesson.title || lesson.name || 'Lesson player')
       : 'Select a lesson to start playback.';
+  }
+  const lessonMeta = document.getElementById('learningLessonMeta');
+  if (lessonMeta) {
+    lessonMeta.innerHTML = '';
+    if (lesson) {
+      lessonMeta.appendChild(buildRequirementBadge(lesson.required ?? lesson.isRequired ?? lesson.assignmentRequired));
+      lessonMeta.appendChild(buildStatusBadge(resolveLessonStatus(lesson.id)));
+    }
   }
 
   renderProgressBar('learningLessonProgressBar', 'learningLessonProgressText', lesson ? resolveLessonProgress(lesson.id) : 0);
