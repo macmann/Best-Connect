@@ -155,6 +155,25 @@ function hasProgressOverrideAccess(user) {
   return hasAnyRole(user, HR_LEARNING_ROLES) || hasAnyRole(user, MANAGER_ROLES);
 }
 
+function resolveProgressEmployeeId(req, res) {
+  const requestedEmployeeId = req.body.employeeId ? String(req.body.employeeId) : '';
+  const employeeId = requestedEmployeeId || String(req.user?.id || '');
+
+  if (!employeeId) {
+    res.status(400).json({ error: 'employee_id_required' });
+    return null;
+  }
+
+  if (requestedEmployeeId && employeeId !== String(req.user?.id || '')) {
+    if (!hasProgressOverrideAccess(req.user)) {
+      res.status(403).json({ error: 'learning_hub_progress_forbidden' });
+      return null;
+    }
+  }
+
+  return employeeId;
+}
+
 async function resolveReportEmployeeScope(database, user) {
   if (hasAnyRole(user, HR_LEARNING_ROLES)) {
     const employees = await database.collection('employees').find().toArray();
@@ -864,18 +883,8 @@ router.get('/lessons/:lessonId/playback', async (req, res) => {
 
 router.post('/progress', async (req, res) => {
   try {
-    const requestedEmployeeId = req.body.employeeId ? String(req.body.employeeId) : '';
-    const employeeId = requestedEmployeeId || String(req.user?.id || '');
-
-    if (!employeeId) {
-      return res.status(400).json({ error: 'employee_id_required' });
-    }
-
-    if (requestedEmployeeId && employeeId !== String(req.user?.id || '')) {
-      if (!hasProgressOverrideAccess(req.user)) {
-        return res.status(403).json({ error: 'learning_hub_progress_forbidden' });
-      }
-    }
+    const employeeId = resolveProgressEmployeeId(req, res);
+    if (!employeeId) return;
 
     const progressType = typeof req.body.progressType === 'string'
       ? req.body.progressType.trim().toLowerCase()
@@ -1002,9 +1011,179 @@ router.post('/progress', async (req, res) => {
   }
 });
 
+router.post('/progress/lessons/:lessonId', async (req, res) => {
+  try {
+    const employeeId = resolveProgressEmployeeId(req, res);
+    if (!employeeId) return;
+
+    const lessonId = req.params.lessonId ? String(req.params.lessonId) : '';
+    if (!lessonId) {
+      return res.status(400).json({ error: 'lesson_id_required' });
+    }
+
+    const database = getDatabase();
+    const { lesson, moduleDoc, courseDoc, error, status } = await resolveLessonHierarchy(
+      database,
+      lessonId
+    );
+    if (error) {
+      return res.status(status).json({ error });
+    }
+
+    const { progress, error: progressError } = buildProgressEntry({
+      ...req.body,
+      progressType: 'lesson',
+      employeeId,
+      courseId: courseDoc._id.toString(),
+      moduleId: moduleDoc._id.toString(),
+      lessonId: lesson._id.toString()
+    });
+
+    if (progressError) {
+      return res.status(400).json({ error: progressError });
+    }
+
+    await database.collection('learningProgress').updateOne(
+      {
+        employeeId: progress.employeeId,
+        courseId: progress.courseId,
+        moduleId: progress.moduleId || null,
+        lessonId: progress.lessonId || null,
+        progressType: progress.progressType
+      },
+      { $set: progress },
+      { upsert: true }
+    );
+
+    const moduleRollup = await computeModuleRollup(database, {
+      employeeId,
+      moduleId: progress.moduleId,
+      courseId: progress.courseId
+    });
+    const courseRollup = await computeCourseRollup(database, {
+      employeeId,
+      courseId: progress.courseId
+    });
+
+    return res.json({ progress, moduleRollup, courseRollup });
+  } catch (error) {
+    console.error('Failed to update lesson progress', error);
+    return res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+router.post('/progress/modules/:moduleId', async (req, res) => {
+  try {
+    const employeeId = resolveProgressEmployeeId(req, res);
+    if (!employeeId) return;
+
+    const moduleId = req.params.moduleId ? String(req.params.moduleId) : '';
+    if (!moduleId) {
+      return res.status(400).json({ error: 'module_id_required' });
+    }
+
+    const database = getDatabase();
+    const { moduleDoc, courseDoc, error, status } = await resolveModuleHierarchy(
+      database,
+      moduleId
+    );
+    if (error) {
+      return res.status(status).json({ error });
+    }
+
+    const { progress, error: progressError } = buildProgressEntry({
+      ...req.body,
+      progressType: 'module',
+      employeeId,
+      courseId: courseDoc._id.toString(),
+      moduleId: moduleDoc._id.toString(),
+      lessonId: ''
+    });
+
+    if (progressError) {
+      return res.status(400).json({ error: progressError });
+    }
+
+    await database.collection('learningProgress').updateOne(
+      {
+        employeeId: progress.employeeId,
+        courseId: progress.courseId,
+        moduleId: progress.moduleId || null,
+        lessonId: progress.lessonId || null,
+        progressType: progress.progressType
+      },
+      { $set: progress },
+      { upsert: true }
+    );
+
+    const courseRollup = await computeCourseRollup(database, {
+      employeeId,
+      courseId: progress.courseId
+    });
+
+    return res.json({ progress, courseRollup });
+  } catch (error) {
+    console.error('Failed to update module progress', error);
+    return res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+router.post('/progress/courses/:courseId', async (req, res) => {
+  try {
+    const employeeId = resolveProgressEmployeeId(req, res);
+    if (!employeeId) return;
+
+    const courseId = req.params.courseId ? String(req.params.courseId) : '';
+    if (!courseId) {
+      return res.status(400).json({ error: 'course_id_required' });
+    }
+
+    const courseObjectId = toObjectId(courseId);
+    if (!courseObjectId) {
+      return res.status(400).json({ error: 'invalid_course_id' });
+    }
+
+    const database = getDatabase();
+    const courseDoc = await database.collection('learningCourses').findOne({ _id: courseObjectId });
+    if (!courseDoc) {
+      return res.status(404).json({ error: 'course_not_found' });
+    }
+
+    const { progress, error: progressError } = buildProgressEntry({
+      ...req.body,
+      progressType: 'course',
+      employeeId,
+      courseId: courseDoc._id.toString(),
+      moduleId: '',
+      lessonId: ''
+    });
+
+    if (progressError) {
+      return res.status(400).json({ error: progressError });
+    }
+
+    await database.collection('learningProgress').updateOne(
+      {
+        employeeId: progress.employeeId,
+        courseId: progress.courseId,
+        moduleId: progress.moduleId || null,
+        lessonId: progress.lessonId || null,
+        progressType: progress.progressType
+      },
+      { $set: progress },
+      { upsert: true }
+    );
+
+    return res.json({ progress });
+  } catch (error) {
+    console.error('Failed to update course progress', error);
+    return res.status(500).json({ error: 'internal_error' });
+  }
+});
+
 router.post('/progress/lessons/:lessonId/completion', async (req, res) => {
   try {
-    const employeeId = getAuthenticatedEmployeeId(req, res);
+    const employeeId = resolveProgressEmployeeId(req, res);
     if (!employeeId) return;
 
     const lessonId = req.params.lessonId ? String(req.params.lessonId) : '';
@@ -1066,7 +1245,7 @@ router.post('/progress/lessons/:lessonId/completion', async (req, res) => {
 
 router.post('/progress/lessons/:lessonId/watch', async (req, res) => {
   try {
-    const employeeId = getAuthenticatedEmployeeId(req, res);
+    const employeeId = resolveProgressEmployeeId(req, res);
     if (!employeeId) return;
 
     const lessonId = req.params.lessonId ? String(req.params.lessonId) : '';
