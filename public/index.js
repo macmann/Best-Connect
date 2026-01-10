@@ -1001,7 +1001,11 @@ function showPanel(name) {
   if (name === 'learningHub' && learningHubPanel) {
     learningHubPanel.classList.remove('hidden');
     if (learningHubBtn) learningHubBtn.classList.add('active-tab');
-    initLearningHub();
+    if (learningHubState.initialized) {
+      refreshLearningHubData();
+    } else {
+      initLearningHub();
+    }
   }
   if (name === 'learningReports' && learningReportsPanel) {
     learningReportsPanel.classList.remove('hidden');
@@ -1608,7 +1612,8 @@ function renderLessonPlayer() {
 
   const markComplete = document.getElementById('learningMarkComplete');
   if (markComplete) {
-    markComplete.disabled = !lesson;
+    markComplete.disabled = true;
+    markComplete.title = 'Progress tracking will be available once completion updates are enabled.';
   }
 }
 
@@ -1749,42 +1754,8 @@ async function loadLessonPlayback(lessonId) {
   }
 }
 
-function updateProgressMapForLesson(lessonId, progressValue = 100) {
-  learningHubState.progress.lessons.set(String(lessonId), { id: lessonId, progress: progressValue, status: 'completed' });
-  const moduleId = learningHubState.selectedModuleId;
-  const courseId = learningHubState.selectedCourseId;
-  if (moduleId) {
-    const moduleProgress = calculateModuleProgressFromLessons(moduleId);
-    learningHubState.progress.modules.set(String(moduleId), { id: moduleId, progress: moduleProgress });
-  }
-  if (courseId) {
-    const courseProgress = calculateCourseProgressFromModules(courseId);
-    learningHubState.progress.courses.set(String(courseId), { id: courseId, progress: courseProgress });
-  }
-}
-
-async function sendProgressUpdate(lessonId) {
-  if (!lessonId) return;
-  try {
-    await learningHubFetch('/api/learning-hub/progress', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        lessonId,
-        status: 'completed',
-        progress: 100
-      })
-    });
-  } catch (error) {
-    console.warn('Progress update failed', error);
-  }
-}
-
-async function markLessonComplete(lessonId) {
-  if (!lessonId) return;
-  updateProgressMapForLesson(lessonId, 100);
-  updateLearningHubUI();
-  await sendProgressUpdate(lessonId);
+function refreshLearningHubData() {
+  return Promise.all([loadLearningHubProgress(), loadLearningHubCourses()]).then(updateLearningHubUI);
 }
 
 async function selectCourse(courseId) {
@@ -1850,14 +1821,13 @@ function initLearningHub() {
   const prevBtn = document.getElementById('learningPrevLesson');
   const nextBtn = document.getElementById('learningNextLesson');
   const markBtn = document.getElementById('learningMarkComplete');
-  const video = document.getElementById('learningVideo');
 
   if (filter) {
     filter.addEventListener('change', () => {
       learningHubState.selectedCourseId = null;
       learningHubState.selectedModuleId = null;
       learningHubState.selectedLessonId = null;
-      loadLearningHubCourses();
+      refreshLearningHubData();
     });
   }
 
@@ -1892,13 +1862,11 @@ function initLearningHub() {
     nextBtn.addEventListener('click', () => navigateLesson('next'));
   }
   if (markBtn) {
-    markBtn.addEventListener('click', () => markLessonComplete(learningHubState.selectedLessonId));
-  }
-  if (video) {
-    video.addEventListener('ended', () => markLessonComplete(learningHubState.selectedLessonId));
+    markBtn.disabled = true;
+    markBtn.title = 'Progress tracking will be available once completion updates are enabled.';
   }
 
-  Promise.all([loadLearningHubProgress(), loadLearningHubCourses()]).then(updateLearningHubUI);
+  refreshLearningHubData();
 }
 
 // ----------- LEARNING HUB ADMIN -----------

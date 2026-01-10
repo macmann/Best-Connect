@@ -1515,6 +1515,12 @@
   justify-content: space-between;
 }
 
+.learning-progress-note {
+  margin: 12px 0 0;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
 .recruitment-pipeline-grid {
   display: flex;
   flex-wrap: wrap;
