@@ -1573,7 +1573,7 @@ router.post('/progress/lessons/:lessonId/watch', async (req, res) => {
 
 router.post('/progress/modules/:moduleId/rollup', async (req, res) => {
   try {
-    const employeeId = getAuthenticatedEmployeeId(req, res);
+    const employeeId = resolveProgressEmployeeId(req, res);
     if (!employeeId) return;
 
     const moduleId = req.params.moduleId ? String(req.params.moduleId) : '';
@@ -1609,7 +1609,7 @@ router.post('/progress/modules/:moduleId/rollup', async (req, res) => {
 
 router.post('/progress/courses/:courseId/rollup', async (req, res) => {
   try {
-    const employeeId = getAuthenticatedEmployeeId(req, res);
+    const employeeId = resolveProgressEmployeeId(req, res);
     if (!employeeId) return;
 
     const courseId = req.params.courseId ? String(req.params.courseId) : '';
