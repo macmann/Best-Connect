@@ -2153,7 +2153,8 @@ const learningAdminState = {
 
 const roleAssignmentState = {
   employees: [],
-  loading: false
+  loading: false,
+  initialized: false
 };
 
 const ROLE_ASSIGNMENT_ENDPOINT = '/api/role-assignments';
@@ -2640,6 +2641,13 @@ async function loadRoleAssignmentEmployees() {
   } finally {
     roleAssignmentState.loading = false;
   }
+}
+
+function initRoleAssignmentUI() {
+  if (roleAssignmentState.initialized) return;
+  roleAssignmentState.initialized = true;
+  if (!isSuperAdmin(currentUser)) return;
+  loadRoleAssignmentEmployees();
 }
 
 function updateRoleAssignmentVisibility() {
@@ -8320,7 +8328,10 @@ async function init() {
   const aiForm = document.getElementById('aiSettingsForm');
   if (aiForm) aiForm.addEventListener('submit', onAiSettingsSubmit);
   const roleAssignmentForm = document.getElementById('roleAssignmentForm');
-  if (roleAssignmentForm) roleAssignmentForm.addEventListener('submit', onRoleAssignmentSubmit);
+  if (roleAssignmentForm) {
+    roleAssignmentForm.addEventListener('submit', onRoleAssignmentSubmit);
+    initRoleAssignmentUI();
+  }
   const chatWidgetForm = document.getElementById('chatWidgetSettingsForm');
   if (chatWidgetForm) chatWidgetForm.addEventListener('submit', onChatWidgetSettingsSubmit);
   const chatWidgetDefaultBtn = document.getElementById('chatWidgetUseDefault');
