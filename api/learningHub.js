@@ -38,6 +38,7 @@ const HR_LEARNING_ROLES = new Set([
   'learning & development'
 ]);
 
+const ADMIN_ROLES = new Set(['admin', 'administrator', 'superadmin']);
 const MANAGER_ROLES = new Set(['manager', 'superadmin']);
 const REPORT_MANAGER_KEYWORDS = ['appraiser', 'manager', 'supervisor', 'reporting'];
 
@@ -134,7 +135,7 @@ function requireLearningHubWriteAccess(req, res, next) {
   if (!req.user) {
     return res.status(401).json({ error: 'authentication_required' });
   }
-  if (!hasAnyRole(req.user, HR_LEARNING_ROLES)) {
+  if (!hasAnyRole(req.user, HR_LEARNING_ROLES) && !hasAnyRole(req.user, ADMIN_ROLES)) {
     return res.status(403).json({ error: 'learning_hub_write_forbidden' });
   }
   return next();
