@@ -2156,6 +2156,8 @@ const roleAssignmentState = {
   loading: false
 };
 
+const ROLE_ASSIGNMENT_ENDPOINT = '/api/role-assignments';
+
 function setLearningAdminStatus(message = '') {
   const statusEl = document.getElementById('learningAdminStatus');
   if (!statusEl) return;
@@ -2182,6 +2184,40 @@ function handleLearningAdminAuthFailure(res) {
     return true;
   }
   return false;
+}
+
+function getRoleAssignmentStatusElement() {
+  let statusEl = document.getElementById('roleAssignmentStatus');
+  if (statusEl) return statusEl;
+  const section = document.getElementById('roleAssignmentSection');
+  if (!section) return null;
+  statusEl = document.createElement('div');
+  statusEl.id = 'roleAssignmentStatus';
+  statusEl.className = 'settings-status text-muted';
+  const form = document.getElementById('roleAssignmentForm');
+  if (form && form.parentElement === section) {
+    form.insertAdjacentElement('afterend', statusEl);
+  } else {
+    section.appendChild(statusEl);
+  }
+  return statusEl;
+}
+
+function setRoleAssignmentStatus(message, type = 'info') {
+  const statusEl = getRoleAssignmentStatusElement();
+  if (!statusEl) return;
+  statusEl.textContent = message || '';
+  statusEl.classList.remove('settings-status--error', 'settings-status--success');
+  if (!message) {
+    statusEl.classList.add('text-muted');
+    return;
+  }
+  statusEl.classList.remove('text-muted');
+  if (type === 'error') {
+    statusEl.classList.add('settings-status--error');
+  } else if (type === 'success') {
+    statusEl.classList.add('settings-status--success');
+  }
 }
 
 function learningAdminFetch(path, options = {}) {
@@ -2616,8 +2652,11 @@ function updateRoleAssignmentVisibility() {
   }
 }
 
-function onRoleAssignmentSubmit(event) {
+async function onRoleAssignmentSubmit(event) {
   event.preventDefault();
+  if (!currentUser || !isSuperAdmin(currentUser)) return;
+  const form = event.currentTarget;
+  const submitBtn = form?.querySelector('button[type="submit"]');
   const employeeSelect = document.getElementById('roleAssignEmployeeSelect');
   const roleSelect = document.getElementById('roleAssignRoleSelect');
   const employeeIds = employeeSelect
@@ -2625,8 +2664,43 @@ function onRoleAssignmentSubmit(event) {
     : [];
   const roleValue = roleSelect?.value || '';
   if (!employeeIds.length || !roleValue) {
-    alert('Select at least one employee and a role.');
+    setRoleAssignmentStatus('Select at least one employee and a role.', 'error');
     return;
+  }
+
+  const payload = {
+    employeeIds,
+    role: roleValue
+  };
+
+  if (submitBtn) submitBtn.disabled = true;
+  setRoleAssignmentStatus('Assigning roles...');
+  try {
+    const res = await learningAdminFetch(ROLE_ASSIGNMENT_ENDPOINT, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Unable to assign roles.');
+    }
+    if (employeeSelect) {
+      Array.from(employeeSelect.options).forEach(option => {
+        option.selected = false;
+      });
+    }
+    if (roleSelect) {
+      roleSelect.value = '';
+      if (roleSelect.value !== '' && roleSelect.options.length) {
+        roleSelect.selectedIndex = 0;
+      }
+    }
+    setRoleAssignmentStatus('Role assignments saved.', 'success');
+  } catch (error) {
+    console.error('Failed to assign roles', error);
+    setRoleAssignmentStatus(error.message || 'Unable to assign roles.', 'error');
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
   }
 }
 
