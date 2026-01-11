@@ -3954,6 +3954,38 @@
           <div id="aiSettingsStatus" class="settings-status text-muted"></div>
         </div>
 
+        <div id="roleAssignmentSection" class="md-card hidden">
+          <div class="card-title">
+            <span class="material-symbols-rounded">badge</span>
+            Role Assignments
+          </div>
+          <p class="card-subtitle">Assign HR or L&amp;D roles to selected employees.</p>
+          <form id="roleAssignmentForm" class="settings-form">
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label" for="roleAssignEmployeeSelect">Employees</label>
+              <div class="md-input-wrapper">
+                <span class="material-symbols-rounded">group</span>
+                <select id="roleAssignEmployeeSelect" class="md-input" multiple size="6"></select>
+              </div>
+            </div>
+            <div class="settings-form__fields">
+              <label class="md-label" for="roleAssignRoleSelect">Role</label>
+              <div class="md-input-wrapper">
+                <span class="material-symbols-rounded">workspace_premium</span>
+                <select id="roleAssignRoleSelect" class="md-input">
+                  <option value="" selected disabled>-- select role --</option>
+                  <option value="hr">HR</option>
+                  <option value="l&d">L&amp;D</option>
+                </select>
+              </div>
+            </div>
+            <button id="roleAssignSubmit" type="submit" class="md-button md-button--filled md-button--small settings-form__submit">
+              <span class="material-symbols-rounded">task_alt</span>
+              Assign Role
+            </button>
+          </form>
+        </div>
+
         <div class="md-card">
           <div class="card-title">
             <span class="material-symbols-rounded">forum</span>
