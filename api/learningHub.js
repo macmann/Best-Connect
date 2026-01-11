@@ -822,6 +822,41 @@ router.patch('/courses/:id/archive', requireLearningHubWriteAccess, async (req, 
   }
 });
 
+router.get('/courses/:courseId/modules', async (req, res) => {
+  const rawCourseId = normalizeString(req.params.courseId);
+  if (!rawCourseId) {
+    return res.status(400).json({ error: 'course_id_required' });
+  }
+
+  try {
+    const database = getDatabase();
+    const courseObjectId = toObjectId(rawCourseId);
+    let courseDoc = null;
+
+    if (courseObjectId) {
+      courseDoc = await database.collection('learningCourses').findOne({ _id: courseObjectId });
+    } else {
+      courseDoc = await database.collection('learningCourses').findOne({ _id: rawCourseId });
+    }
+
+    if (!courseDoc) {
+      return res.status(404).json({ error: 'course_not_found' });
+    }
+
+    const courseId = String(courseDoc._id);
+    const modules = await database
+      .collection('learningModules')
+      .find({ courseId })
+      .sort({ order: 1, createdAt: 1 })
+      .toArray();
+
+    return res.json({ modules: modules.map(normalizeDocument) });
+  } catch (error) {
+    console.error('Failed to list modules', error);
+    return res.status(500).json({ error: 'internal_error' });
+  }
+});
+
 router.post('/courses/:courseId/modules', requireLearningHubWriteAccess, async (req, res) => {
   try {
     const { module, error } = buildModule({
