@@ -1088,6 +1088,7 @@ function showPanel(name) {
       loadChatWidgetSettings();
       loadPostLoginSettings();
     }
+    updateRoleAssignmentVisibility();
   }
   if (name === 'finance' && financePanel) {
     financePanel.classList.remove('hidden');
@@ -1144,6 +1145,8 @@ function toggleTabsByRole() {
   if (learningAdminTab) {
     learningAdminTab.classList.toggle('hidden', !learningAdminVisible);
   }
+
+  updateRoleAssignmentVisibility();
 
   refreshTabGroupVisibility();
 }
@@ -2148,6 +2151,11 @@ const learningAdminState = {
   }
 };
 
+const roleAssignmentState = {
+  employees: [],
+  loading: false
+};
+
 function setLearningAdminStatus(message = '') {
   const statusEl = document.getElementById('learningAdminStatus');
   if (!statusEl) return;
@@ -2387,6 +2395,35 @@ function updateLearningAdminAssignmentOptions() {
   }
 }
 
+function getEmployeeOptionValue(employee) {
+  return employee?.id ?? employee?.employeeId ?? employee?.userId ?? '';
+}
+
+function getEmployeeOptionLabel(employee) {
+  const name = employee?.name || employee?.fullName || employee?.employeeName || '';
+  const fallbackId = getEmployeeOptionValue(employee);
+  const label = name || (fallbackId ? `Employee ${fallbackId}` : 'Employee');
+  return String(label).trim();
+}
+
+function updateRoleAssignmentEmployeeSelect(employees = []) {
+  const select = document.getElementById('roleAssignEmployeeSelect');
+  if (!select) return;
+  select.innerHTML = '';
+  if (!Array.isArray(employees) || !employees.length) {
+    const emptyOption = new Option('No employees available', '');
+    emptyOption.disabled = true;
+    select.add(emptyOption);
+    return;
+  }
+  employees.forEach(employee => {
+    const value = getEmployeeOptionValue(employee);
+    if (!value) return;
+    const label = getEmployeeOptionLabel(employee);
+    select.add(new Option(label, value));
+  });
+}
+
 function updateLearningAdminEmployeesSelect() {
   const select = document.getElementById('learningAdminAssignmentEmployees');
   if (!select) return;
@@ -2394,6 +2431,7 @@ function updateLearningAdminEmployeesSelect() {
   learningAdminState.employees.forEach(emp => {
     select.add(new Option(emp.name || emp.fullName || `Employee ${emp.id}`, emp.id));
   });
+  updateRoleAssignmentEmployeeSelect(learningAdminState.employees);
 }
 
 function resolveLearningAdminLesson() {
@@ -2540,6 +2578,55 @@ async function loadLearningAdminEmployees() {
     setLearningAdminStatus('Unable to load employee list.');
   } finally {
     learningAdminState.loading.employees = false;
+  }
+}
+
+async function loadRoleAssignmentEmployees() {
+  const select = document.getElementById('roleAssignEmployeeSelect');
+  if (!select) return;
+  if (Array.isArray(learningAdminState.employees) && learningAdminState.employees.length) {
+    updateRoleAssignmentEmployeeSelect(learningAdminState.employees);
+    return;
+  }
+  if (Array.isArray(roleAssignmentState.employees) && roleAssignmentState.employees.length) {
+    updateRoleAssignmentEmployeeSelect(roleAssignmentState.employees);
+    return;
+  }
+  if (roleAssignmentState.loading) return;
+  roleAssignmentState.loading = true;
+  try {
+    const employees = await getJSON('/employees');
+    roleAssignmentState.employees = Array.isArray(employees) ? employees : [];
+    updateRoleAssignmentEmployeeSelect(roleAssignmentState.employees);
+  } catch (error) {
+    console.error('Failed to load employees for role assignments', error);
+    updateRoleAssignmentEmployeeSelect([]);
+  } finally {
+    roleAssignmentState.loading = false;
+  }
+}
+
+function updateRoleAssignmentVisibility() {
+  const section = document.getElementById('roleAssignmentSection');
+  if (!section) return;
+  const canView = isSuperAdmin(currentUser);
+  section.classList.toggle('hidden', !canView);
+  if (canView) {
+    loadRoleAssignmentEmployees();
+  }
+}
+
+function onRoleAssignmentSubmit(event) {
+  event.preventDefault();
+  const employeeSelect = document.getElementById('roleAssignEmployeeSelect');
+  const roleSelect = document.getElementById('roleAssignRoleSelect');
+  const employeeIds = employeeSelect
+    ? Array.from(employeeSelect.selectedOptions).map(option => option.value).filter(Boolean)
+    : [];
+  const roleValue = roleSelect?.value || '';
+  if (!employeeIds.length || !roleValue) {
+    alert('Select at least one employee and a role.');
+    return;
   }
 }
 
@@ -8158,6 +8245,8 @@ async function init() {
   if (emailForm) emailForm.addEventListener('submit', onEmailSettingsSubmit);
   const aiForm = document.getElementById('aiSettingsForm');
   if (aiForm) aiForm.addEventListener('submit', onAiSettingsSubmit);
+  const roleAssignmentForm = document.getElementById('roleAssignmentForm');
+  if (roleAssignmentForm) roleAssignmentForm.addEventListener('submit', onRoleAssignmentSubmit);
   const chatWidgetForm = document.getElementById('chatWidgetSettingsForm');
   if (chatWidgetForm) chatWidgetForm.addEventListener('submit', onChatWidgetSettingsSubmit);
   const chatWidgetDefaultBtn = document.getElementById('chatWidgetUseDefault');
