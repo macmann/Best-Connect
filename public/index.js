@@ -1408,6 +1408,13 @@ function isPdfAsset(asset) {
   return /\.pdf(\?.*)?$/.test(url);
 }
 
+function isPreviewableEmbedAsset(asset) {
+  if (!asset) return false;
+  if (asset?.playback?.embedUrl) return true;
+  if (asset?.playback?.type === 'onedrive') return Boolean(resolveAssetEmbedUrl(asset));
+  return false;
+}
+
 function resolveDocumentEmbedUrl(asset) {
   if (!asset) return '';
   const url = resolveAssetUrl(asset);
@@ -1419,6 +1426,23 @@ function resolveDocumentEmbedUrl(asset) {
     return url;
   }
   return '';
+}
+
+function findPrimaryPreviewAsset(assets = []) {
+  const items = Array.isArray(assets) ? assets : [];
+  const videoAsset = items.find(isVideoAsset);
+  if (videoAsset) {
+    return { asset: videoAsset, type: 'video' };
+  }
+  const documentAsset = items.find(asset => isPptxAsset(asset) || isPdfAsset(asset));
+  if (documentAsset) {
+    return { asset: documentAsset, type: 'document' };
+  }
+  const embedAsset = items.find(isPreviewableEmbedAsset);
+  if (embedAsset) {
+    return { asset: embedAsset, type: 'embed' };
+  }
+  return { asset: null, type: 'placeholder' };
 }
 
 function toPercent(value) {
@@ -1805,16 +1829,16 @@ function renderLessonPlayer() {
   const docEmbed = document.getElementById('learningDocEmbed');
   const placeholder = document.getElementById('learningVideoPlaceholder');
   const assets = normalizePlaybackAssets(playback);
-  const videoAsset = assets.find(isVideoAsset);
-  const videoSrc = videoAsset ? resolveAssetUrl(videoAsset) : '';
-  const isYouTube = videoAsset?.playback?.type === 'youtube';
-  const onedriveAsset = assets.find(asset => asset?.playback?.type === 'onedrive');
-  const onedriveEmbedUrl = onedriveAsset ? resolveAssetEmbedUrl(onedriveAsset) : '';
-  const docAsset = !videoAsset ? assets.find(asset => isPptxAsset(asset) || isPdfAsset(asset)) : null;
-  const docSrc = docAsset ? resolveDocumentEmbedUrl(docAsset) : '';
+  const primaryPreview = findPrimaryPreviewAsset(assets);
+  const previewAsset = primaryPreview.asset;
+  const previewType = primaryPreview.type;
+  const videoSrc = previewType === 'video' && previewAsset ? resolveAssetUrl(previewAsset) : '';
+  const isYouTube = previewType === 'video' && previewAsset?.playback?.type === 'youtube';
+  const embedSrc = previewType === 'embed' && previewAsset ? resolveAssetEmbedUrl(previewAsset) : '';
+  const docSrc = previewType === 'document' && previewAsset ? resolveDocumentEmbedUrl(previewAsset) : '';
 
   if (video && embed && placeholder && docEmbed) {
-    if (videoAsset && isYouTube && videoSrc) {
+    if (previewType === 'video' && previewAsset && isYouTube && videoSrc) {
       embed.src = videoSrc;
       embed.classList.remove('hidden');
       video.classList.add('hidden');
@@ -1822,15 +1846,26 @@ function renderLessonPlayer() {
       docEmbed.classList.add('hidden');
       docEmbed.removeAttribute('src');
       placeholder.classList.add('hidden');
-    } else if (onedriveAsset && onedriveEmbedUrl) {
-      embed.src = onedriveEmbedUrl;
-      embed.classList.remove('hidden');
-      video.classList.add('hidden');
-      video.removeAttribute('src');
-      docEmbed.classList.add('hidden');
-      docEmbed.removeAttribute('src');
-      placeholder.classList.add('hidden');
-    } else if (videoAsset && videoSrc) {
+    } else if (previewType === 'video' && previewAsset?.playback?.type === 'onedrive') {
+      const onedriveEmbedUrl = resolveAssetEmbedUrl(previewAsset);
+      if (onedriveEmbedUrl) {
+        embed.src = onedriveEmbedUrl;
+        embed.classList.remove('hidden');
+        video.classList.add('hidden');
+        video.removeAttribute('src');
+        docEmbed.classList.add('hidden');
+        docEmbed.removeAttribute('src');
+        placeholder.classList.add('hidden');
+      } else {
+        embed.removeAttribute('src');
+        embed.classList.add('hidden');
+        video.classList.add('hidden');
+        video.removeAttribute('src');
+        docEmbed.classList.add('hidden');
+        docEmbed.removeAttribute('src');
+        placeholder.classList.remove('hidden');
+      }
+    } else if (previewType === 'video' && videoSrc) {
       video.src = videoSrc;
       video.classList.remove('hidden');
       embed.classList.add('hidden');
@@ -1838,13 +1873,21 @@ function renderLessonPlayer() {
       docEmbed.classList.add('hidden');
       docEmbed.removeAttribute('src');
       placeholder.classList.add('hidden');
-    } else if (docAsset && docSrc) {
+    } else if (previewType === 'document' && docSrc) {
       docEmbed.src = docSrc;
       docEmbed.classList.remove('hidden');
       video.classList.add('hidden');
       video.removeAttribute('src');
       embed.classList.add('hidden');
       embed.removeAttribute('src');
+      placeholder.classList.add('hidden');
+    } else if (previewType === 'embed' && embedSrc) {
+      embed.src = embedSrc;
+      embed.classList.remove('hidden');
+      video.classList.add('hidden');
+      video.removeAttribute('src');
+      docEmbed.classList.add('hidden');
+      docEmbed.removeAttribute('src');
       placeholder.classList.add('hidden');
     } else {
       video.removeAttribute('src');
