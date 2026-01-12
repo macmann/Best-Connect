@@ -983,6 +983,7 @@ function showPanel(name) {
   const portalPanel = document.getElementById('portalPanel');
   const performancePanel = document.getElementById('performancePanel');
   const learningHubPanel = document.getElementById('learningHubPanel');
+  const learningFocusPanel = document.getElementById('learningFocusPanel');
   const learningReportsPanel = document.getElementById('learningReportsPanel');
   const learningAdminPanel = document.getElementById('learningAdminPanel');
   const managePanel = document.getElementById('managePanel');
@@ -1000,6 +1001,7 @@ function showPanel(name) {
   portalPanel.classList.add('hidden');
   if (performancePanel) performancePanel.classList.add('hidden');
   if (learningHubPanel) learningHubPanel.classList.add('hidden');
+  if (learningFocusPanel) learningFocusPanel.classList.add('hidden');
   if (learningReportsPanel) learningReportsPanel.classList.add('hidden');
   if (learningAdminPanel) learningAdminPanel.classList.add('hidden');
   managePanel.classList.add('hidden');
@@ -1009,6 +1011,10 @@ function showPanel(name) {
   if (locationPanel) locationPanel.classList.add('hidden');
   settingsPanel.classList.add('hidden');
   if (financePanel) financePanel.classList.add('hidden');
+
+  if (learningFocusState?.active && name !== 'learningFocus') {
+    exitLearningFocusMode({ returnToHub: false });
+  }
 
   if (name === 'profile') {
     if (profilePanel) profilePanel.classList.remove('hidden');
@@ -1032,6 +1038,10 @@ function showPanel(name) {
     } else {
       initLearningHub();
     }
+  }
+  if (name === 'learningFocus' && learningFocusPanel) {
+    learningFocusPanel.classList.remove('hidden');
+    initLearningFocus();
   }
   if (name === 'learningReports' && learningReportsPanel) {
     learningReportsPanel.classList.remove('hidden');
@@ -1179,6 +1189,14 @@ const learningHubState = {
     pendingWatchUpdate: false,
     pendingCompletionUpdate: false
   }
+};
+
+const learningFocusState = {
+  active: false,
+  initialized: false,
+  playerEl: null,
+  defaultDock: null,
+  focusDock: null
 };
 
 function learningHubFetch(path, options = {}) {
@@ -1685,6 +1703,7 @@ function renderLessonList() {
 function renderLessonPlayer() {
   const lesson = findCurrentLesson();
   const title = document.getElementById('learningLessonTitle');
+  const focusTitle = document.getElementById('learningFocusTitle');
   const prevBtn = document.getElementById('learningPrevLesson');
   const nextBtn = document.getElementById('learningNextLesson');
   const orderedLessons = getOrderedLessons();
@@ -1693,6 +1712,11 @@ function renderLessonPlayer() {
     : -1;
   if (title) {
     title.textContent = lesson
+      ? (lesson.title || lesson.name || 'Lesson player')
+      : 'Select a lesson to start playback.';
+  }
+  if (focusTitle) {
+    focusTitle.textContent = lesson
       ? (lesson.title || lesson.name || 'Lesson player')
       : 'Select a lesson to start playback.';
   }
@@ -1796,6 +1820,42 @@ function renderLessonPlayer() {
   }
   if (nextBtn) {
     nextBtn.disabled = lessonIndex === -1 || lessonIndex >= orderedLessons.length - 1;
+  }
+}
+
+function initLearningFocus() {
+  if (learningFocusState.initialized) return;
+  learningFocusState.initialized = true;
+  learningFocusState.playerEl = document.querySelector('.learning-player');
+  learningFocusState.defaultDock = document.getElementById('learningPlayerDock');
+  learningFocusState.focusDock = document.getElementById('learningFocusPlayerDock');
+  const backBtn = document.getElementById('learningFocusBack');
+  if (backBtn) {
+    backBtn.addEventListener('click', () => exitLearningFocusMode());
+  }
+}
+
+function moveLearningPlayer(target) {
+  if (!learningFocusState.playerEl || !target) return;
+  target.appendChild(learningFocusState.playerEl);
+}
+
+function enterLearningFocusMode() {
+  initLearningFocus();
+  if (!learningFocusState.focusDock) return;
+  moveLearningPlayer(learningFocusState.focusDock);
+  learningFocusState.active = true;
+  showPanel('learningFocus');
+}
+
+function exitLearningFocusMode({ returnToHub = true } = {}) {
+  initLearningFocus();
+  if (learningFocusState.defaultDock) {
+    moveLearningPlayer(learningFocusState.defaultDock);
+  }
+  learningFocusState.active = false;
+  if (returnToHub) {
+    showPanel('learningHub');
   }
 }
 
@@ -2106,6 +2166,8 @@ function initLearningHub() {
   const markBtn = document.getElementById('learningMarkComplete');
   const video = document.getElementById('learningVideo');
 
+  initLearningFocus();
+
   if (filter) {
     filter.addEventListener('change', () => {
       learningHubState.selectedCourseId = null;
@@ -2136,6 +2198,7 @@ function initLearningHub() {
       const button = event.target.closest('[data-lesson-id]');
       if (!button) return;
       selectLesson(button.dataset.lessonId);
+      enterLearningFocusMode();
     });
   }
 
