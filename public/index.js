@@ -888,8 +888,21 @@ const payrollSummaryBody = document.getElementById('payrollSummaryBody');
 const payrollSummaryMonth = document.getElementById('payrollSummaryMonth');
 const payrollSummaryEmpty = document.getElementById('payrollSummaryEmpty');
 const payrollExportButton = document.getElementById('payrollExport');
+const payrollCompareToggle = document.getElementById('payrollCompareToggle');
+const payrollComparisonSection = document.getElementById('payrollComparisonSection');
+const payrollComparisonMonth = document.getElementById('payrollComparisonMonth');
+const payrollComparisonLoading = document.getElementById('payrollComparisonLoading');
+const payrollRemovedList = document.getElementById('payrollRemovedList');
+const payrollRemovedEmpty = document.getElementById('payrollRemovedEmpty');
 let financeInitialized = false;
 let financeState = { month: '', employees: [], payrollSummary: [] };
+let financeComparisonState = {
+  month: '',
+  previousMonth: '',
+  previousPayrollSummary: [],
+  loading: false,
+  loaded: false
+};
 let financeLoading = false;
 let financeSaving = false;
 let financeSavingId = null;
@@ -4619,6 +4632,32 @@ function getPayrollSalaryAmount(summary) {
   return null;
 }
 
+function getPayrollComparisonKey(summary = {}) {
+  const rawEmployeeId = summary?.employeeId;
+  if (rawEmployeeId !== null && rawEmployeeId !== undefined && String(rawEmployeeId).trim()) {
+    return `id:${String(rawEmployeeId)}`;
+  }
+  const email = summary?.email;
+  if (email) {
+    return `email:${String(email).trim().toLowerCase()}`;
+  }
+  const name = summary?.name;
+  return `name:${String(name || '').trim().toLowerCase()}`;
+}
+
+function getPreviousPayrollMonth(monthValue) {
+  if (!monthValue) return '';
+  const [yearString, monthString] = monthValue.split('-');
+  const year = Number(yearString);
+  const month = Number(monthString);
+  if (!Number.isFinite(year) || !Number.isFinite(month)) return '';
+  const date = new Date(Date.UTC(year, month - 1, 1));
+  date.setUTCMonth(date.getUTCMonth() - 1);
+  const prevYear = date.getUTCFullYear();
+  const prevMonth = String(date.getUTCMonth() + 1).padStart(2, '0');
+  return `${prevYear}-${prevMonth}`;
+}
+
 function setupFinanceModule() {
   if (financeInitialized) return;
   if (!financeMonthInput || !financeTableBody) return;
@@ -4647,6 +4686,11 @@ function setupFinanceModule() {
   }
   if (payrollExportButton) {
     payrollExportButton.addEventListener('click', exportPayrollToXlsx);
+  }
+  if (payrollCompareToggle) {
+    payrollCompareToggle.addEventListener('change', () => {
+      refreshPayrollComparison();
+    });
   }
   if (financeTableBody) {
     financeTableBody.addEventListener('input', onFinanceSalaryInputChange);
@@ -4697,6 +4741,7 @@ async function loadFinanceData(showFeedback = false) {
     }
     renderFinanceTable();
     renderPayrollSummary();
+    await refreshPayrollComparison();
     if (showFeedback) {
       showToast('Finance data refreshed.', 'success');
     }
@@ -4800,6 +4845,23 @@ function renderPayrollSummary() {
   const summaries = Array.isArray(financeState.payrollSummary)
     ? financeState.payrollSummary
     : [];
+  const compareEnabled = Boolean(payrollCompareToggle?.checked);
+  const comparisonMonthValue = getPreviousPayrollMonth(financeState.month || getCurrentPayrollMonthValue());
+  const comparisonDataReady = compareEnabled
+    && financeComparisonState.previousMonth === comparisonMonthValue
+    && Array.isArray(financeComparisonState.previousPayrollSummary)
+    && !financeComparisonState.loading
+    && financeComparisonState.loaded;
+  const previousSummaries = comparisonDataReady ? financeComparisonState.previousPayrollSummary : [];
+  const currentKeys = summaries.map(summary => getPayrollComparisonKey(summary));
+  const currentKeySet = new Set(currentKeys);
+  const previousKeySet = new Set(previousSummaries.map(summary => getPayrollComparisonKey(summary)));
+  const addedKeys = comparisonDataReady
+    ? new Set(currentKeys.filter(key => !previousKeySet.has(key)))
+    : new Set();
+  const removedSummaries = comparisonDataReady
+    ? previousSummaries.filter(summary => !currentKeySet.has(getPayrollComparisonKey(summary)))
+    : [];
 
   if (payrollSummaryMonth) {
     payrollSummaryMonth.textContent = financeState.month || getCurrentPayrollMonthValue();
@@ -4810,11 +4872,28 @@ function renderPayrollSummary() {
     if (payrollSummaryEmpty) {
       payrollSummaryEmpty.classList.remove('hidden');
     }
+    if (payrollComparisonSection) {
+      payrollComparisonSection.classList.toggle('hidden', !compareEnabled);
+    }
+    if (payrollComparisonLoading) {
+      payrollComparisonLoading.classList.toggle('hidden', !financeComparisonState.loading);
+    }
+    if (payrollRemovedList) {
+      payrollRemovedList.innerHTML = '';
+    }
+    if (payrollRemovedEmpty) {
+      payrollRemovedEmpty.classList.toggle('hidden', !comparisonDataReady);
+    }
+    if (payrollComparisonMonth) {
+      payrollComparisonMonth.textContent = comparisonMonthValue || 'last month';
+    }
     return;
   }
 
   const rows = summaries
     .map(summary => {
+      const comparisonKey = getPayrollComparisonKey(summary);
+      const isAdded = compareEnabled && addedKeys.has(comparisonKey);
       const salaryDisplay = formatSalaryAmount(getPayrollSalaryAmount(summary));
       const bankName = summary?.bankAccountName?.trim()
         ? summary.bankAccountName.trim()
@@ -4824,8 +4903,13 @@ function renderPayrollSummary() {
         : '—';
 
       return `
-        <tr>
-          <td>${escapeHtml(summary?.name || 'Unknown')}</td>
+        <tr class="${isAdded ? 'payroll-table-row--added' : ''}">
+          <td>
+            <span class="payroll-employee-cell">
+              <span>${escapeHtml(summary?.name || 'Unknown')}</span>
+              ${isAdded ? '<span class="payroll-added-badge">Added</span>' : ''}
+            </span>
+          </td>
           <td class="payroll-summary-amount">${escapeHtml(salaryDisplay)}</td>
           <td>${escapeHtml(bankName)}</td>
           <td>${escapeHtml(bankNumber)}</td>
@@ -4837,6 +4921,110 @@ function renderPayrollSummary() {
   payrollSummaryBody.innerHTML = rows;
   if (payrollSummaryEmpty) {
     payrollSummaryEmpty.classList.add('hidden');
+  }
+
+  if (payrollComparisonSection) {
+    payrollComparisonSection.classList.toggle('hidden', !compareEnabled);
+  }
+  if (payrollComparisonMonth) {
+    payrollComparisonMonth.textContent = comparisonMonthValue || 'last month';
+  }
+  if (payrollComparisonLoading) {
+    payrollComparisonLoading.classList.toggle('hidden', !financeComparisonState.loading);
+  }
+  if (payrollRemovedList) {
+    if (!compareEnabled || financeComparisonState.loading) {
+      payrollRemovedList.innerHTML = '';
+    } else {
+      payrollRemovedList.innerHTML = removedSummaries
+        .map(summary => {
+          const salary = formatSalaryAmount(getPayrollSalaryAmount(summary));
+          const name = summary?.name || 'Unknown';
+          return `
+            <li>
+              <strong>${escapeHtml(name)}</strong>
+              <span>${escapeHtml(salary)}</span>
+            </li>
+          `;
+        })
+        .join('');
+    }
+  }
+  if (payrollRemovedEmpty) {
+    const shouldShowEmpty = comparisonDataReady && removedSummaries.length === 0;
+    payrollRemovedEmpty.classList.toggle('hidden', !shouldShowEmpty);
+  }
+}
+
+async function refreshPayrollComparison() {
+  if (!payrollCompareToggle) return;
+  if (!payrollCompareToggle.checked) {
+    financeComparisonState = {
+      month: financeState.month || '',
+      previousMonth: '',
+      previousPayrollSummary: [],
+      loading: false,
+      loaded: false
+    };
+    renderPayrollSummary();
+    return;
+  }
+
+  const currentMonth = financeState.month || getCurrentPayrollMonthValue();
+  const previousMonth = getPreviousPayrollMonth(currentMonth);
+  if (!previousMonth) {
+    financeComparisonState = {
+      month: currentMonth,
+      previousMonth: '',
+      previousPayrollSummary: [],
+      loading: false,
+      loaded: true
+    };
+    renderPayrollSummary();
+    return;
+  }
+
+  if (
+    financeComparisonState.previousMonth === previousMonth
+    && financeComparisonState.month === currentMonth
+    && financeComparisonState.loaded
+  ) {
+    renderPayrollSummary();
+    return;
+  }
+
+  financeComparisonState = {
+    month: currentMonth,
+    previousMonth,
+    previousPayrollSummary: financeComparisonState.previousPayrollSummary,
+    loading: true,
+    loaded: false
+  };
+  renderPayrollSummary();
+
+  try {
+    const res = await apiFetch(`/api/finance/salaries?month=${encodeURIComponent(previousMonth)}`);
+    if (!res.ok) throw new Error('Failed to load previous payroll data');
+    const data = await res.json();
+    financeComparisonState = {
+      month: currentMonth,
+      previousMonth,
+      previousPayrollSummary: Array.isArray(data.payrollSummary) ? data.payrollSummary : [],
+      loading: false,
+      loaded: true
+    };
+  } catch (error) {
+    console.error('Failed to load payroll comparison data', error);
+    financeComparisonState = {
+      month: currentMonth,
+      previousMonth,
+      previousPayrollSummary: [],
+      loading: false,
+      loaded: false
+    };
+    showToast('Unable to load payroll comparison data.', 'warning');
+  } finally {
+    renderPayrollSummary();
   }
 }
 
