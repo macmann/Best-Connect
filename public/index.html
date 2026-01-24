@@ -157,6 +157,150 @@
       box-shadow: 0 12px 22px rgba(79, 70, 229, 0.26);
     }
 
+    .payroll-compare-toggle {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #e2e8f0;
+      background: #f8fafc;
+      font-size: 12px;
+      font-weight: 600;
+      color: #0f172a;
+    }
+
+    .payroll-compare-toggle input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .payroll-compare-toggle__track {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      border-radius: 999px;
+      background: #cbd5f5;
+      transition: background 0.2s ease;
+    }
+
+    .payroll-compare-toggle__track::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.2);
+      transition: transform 0.2s ease;
+    }
+
+    .payroll-compare-toggle input:checked + .payroll-compare-toggle__track {
+      background: #4f46e5;
+    }
+
+    .payroll-compare-toggle input:checked + .payroll-compare-toggle__track::after {
+      transform: translateX(16px);
+    }
+
+    .payroll-compare-toggle__label {
+      white-space: nowrap;
+    }
+
+    .payroll-table tbody tr.payroll-table-row--added {
+      background-color: #ecfdf3;
+    }
+
+    .payroll-table tbody tr.payroll-table-row--added:hover {
+      background-color: #dcfce7;
+    }
+
+    .payroll-employee-cell {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .payroll-added-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #dcfce7;
+      color: #166534;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .payroll-comparison-section {
+      margin-top: 16px;
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      background: #f8fafc;
+    }
+
+    .payroll-comparison-header {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .payroll-comparison-header h3 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .payroll-comparison-subtitle {
+      margin: 0;
+      font-size: 12px;
+      color: #64748b;
+    }
+
+    .payroll-comparison-loading {
+      margin-top: 12px;
+      font-size: 12px;
+      color: #64748b;
+    }
+
+    .payroll-removed-list {
+      margin: 12px 0 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 8px;
+    }
+
+    .payroll-removed-list li {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      font-size: 13px;
+      color: #0f172a;
+    }
+
+    .payroll-removed-list span {
+      color: #6b7280;
+      font-weight: 600;
+      font-size: 12px;
+    }
+
+    .payroll-removed-empty {
+      margin-top: 12px;
+      font-size: 12px;
+      color: #64748b;
+    }
+
     .filter-select,
     .data-grid__select {
       min-width: 160px;
@@ -6990,6 +7134,11 @@
                   <span class="material-symbols-rounded">calendar_month</span>
                   <span id="payrollSummaryMonth"></span>
                 </div>
+                <label class="payroll-compare-toggle" for="payrollCompareToggle">
+                  <input type="checkbox" id="payrollCompareToggle">
+                  <span class="payroll-compare-toggle__track" aria-hidden="true"></span>
+                  <span class="payroll-compare-toggle__label">Show changes vs last month</span>
+                </label>
                 <button id="payrollExport" class="md-button md-button--filled md-button--small payroll-export-button">
                   <span class="material-symbols-rounded">file_download</span>
                   Export XLSX
@@ -7012,6 +7161,21 @@
             </div>
             <div id="payrollSummaryEmpty" class="payroll-summary-empty hidden">
               Payroll summary will appear once salary data is available.
+            </div>
+            <div id="payrollComparisonSection" class="payroll-comparison-section hidden">
+              <div class="payroll-comparison-header">
+                <h3>Removed from payroll</h3>
+                <p class="payroll-comparison-subtitle">
+                  Employees listed in <span id="payrollComparisonMonth"></span> but missing this month.
+                </p>
+              </div>
+              <div id="payrollComparisonLoading" class="payroll-comparison-loading hidden">
+                Loading comparison data…
+              </div>
+              <ul id="payrollRemovedList" class="payroll-removed-list"></ul>
+              <p id="payrollRemovedEmpty" class="payroll-removed-empty hidden">
+                No removed employees compared to last month.
+              </p>
             </div>
           </div>
         </section>
