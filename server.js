@@ -4721,6 +4721,28 @@ init().then(async () => {
     return { year, month };
   }
 
+  function isEmployeeInPayrollMonth(employee, payrollMonthValue) {
+    if (!employee) return false;
+    const payrollDate = resolvePayrollYearMonth(payrollMonthValue);
+    if (!payrollDate) {
+      return isEmployeeActive(employee);
+    }
+    const { year, month } = payrollDate;
+    const monthStart = new Date(year, month - 1, 1);
+    const monthEnd = new Date(year, month, 0);
+    const { startDate, endDate } = buildEmployeeDateContext(employee);
+    const hasDateContext = Boolean(startDate || endDate);
+
+    if (!hasDateContext) {
+      return isEmployeeActive(employee);
+    }
+
+    if (startDate && startDate > monthEnd) return false;
+    if (endDate && endDate < monthStart) return false;
+
+    return true;
+  }
+
   function pickSalaryRecord(records = [], targetMonth = null) {
     if (!Array.isArray(records) || !records.length) return null;
     const normalizedTarget = normalizePayrollMonth(targetMonth);
@@ -5565,7 +5587,7 @@ init().then(async () => {
     });
 
     const activeEmployees = db.data.employees
-      .filter(emp => emp && isEmployeeActive(emp))
+      .filter(emp => emp && isEmployeeInPayrollMonth(emp, month))
       .map(emp => {
         const employeeId = normalizeEmployeeId(emp.id);
         if (!employeeId) return null;
