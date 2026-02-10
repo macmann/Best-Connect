@@ -128,6 +128,7 @@ async function computeAllLeaveBalances(employee, { dateNow = new Date(), applica
 
   const balances = {};
   SUPPORTED_LEAVE_TYPES.forEach(type => {
+    const manualBalanceValue = Number(employee?.leaveBalances?.[type]?.balance);
     const overrideValue = Number(employee?.leaveBalances?.[type]?.yearlyAllocation);
     const entitlementValue = Number(employee?.[`${type}LeaveEntitlement`]);
     const yearEntitlement = Number.isFinite(overrideValue)
@@ -135,16 +136,21 @@ async function computeAllLeaveBalances(employee, { dateNow = new Date(), applica
       : Number.isFinite(entitlementValue)
         ? entitlementValue
         : DEFAULT_ENTITLEMENTS[type];
-    const { earned, balance } = computeAccruedLeaveBalance({
+    const { earned: accruedEarned, balance: accruedBalance } = computeAccruedLeaveBalance({
       yearEntitlement,
       monthsServedInCycle,
       totalLeaveTaken: totals[type]
     });
+
+    const hasManualBalanceOverride = Number.isFinite(manualBalanceValue);
+    const resolvedBalance = hasManualBalanceOverride ? manualBalanceValue : accruedBalance;
+    const resolvedEarned = hasManualBalanceOverride ? manualBalanceValue + totals[type] : accruedEarned;
+
     balances[type] = {
       entitlement: yearEntitlement,
-      earned,
+      earned: resolvedEarned,
       taken: totals[type] || 0,
-      balance
+      balance: resolvedBalance
     };
   });
 
