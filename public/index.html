@@ -2322,8 +2322,25 @@
 }
 
 .profile-balance-chips .balance-chip {
-  flex: 1;
+  width: 100%;
   min-width: 0;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.profile-balance-chips {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.profile-balance-chips .balance-chip .label,
+.profile-balance-chips .balance-chip strong,
+.profile-balance-chips .balance-chip .unit {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .profile-payslip-status {
