@@ -4590,6 +4590,99 @@ init().then(async () => {
     return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized.toLowerCase() : '';
   }
 
+  function buildRequestCategoryId(name, index) {
+    const base = String(name || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40);
+    const fallback = `category-${index + 1}`;
+    return base || fallback;
+  }
+
+  function normalizeRequestCategoriesPayload(payload) {
+    if (!Array.isArray(payload)) {
+      return { error: 'Request categories must be an array.' };
+    }
+
+    const normalized = [];
+    const seenNames = new Set();
+
+    for (let index = 0; index < payload.length; index += 1) {
+      const rawCategory = payload[index];
+      if (!rawCategory || typeof rawCategory !== 'object') {
+        return { error: `Category at index ${index} must be an object.` };
+      }
+
+      const name = toNonEmptyString(rawCategory.name);
+      if (!name) {
+        return { error: `Category name is required at index ${index}.` };
+      }
+      const normalizedName = name.toLowerCase();
+      if (seenNames.has(normalizedName)) {
+        return { error: `Duplicate category name: ${name}.` };
+      }
+      seenNames.add(normalizedName);
+
+      const idInput = toNonEmptyString(rawCategory.id);
+      const id = idInput || buildRequestCategoryId(name, index);
+      if (!id) {
+        return { error: `Category id is required at index ${index}.` };
+      }
+
+      const description = typeof rawCategory.description === 'string'
+        ? rawCategory.description.trim()
+        : '';
+
+      if (rawCategory.active !== undefined && typeof rawCategory.active !== 'boolean') {
+        return { error: `Category active flag must be boolean at index ${index}.` };
+      }
+      const active = rawCategory.active !== false;
+
+      let slaTarget = null;
+      if (rawCategory.slaTarget !== undefined && rawCategory.slaTarget !== null && rawCategory.slaTarget !== '') {
+        const numeric = Number(rawCategory.slaTarget);
+        if (!Number.isFinite(numeric) || numeric <= 0) {
+          return { error: `Category SLA target must be a positive number at index ${index}.` };
+        }
+        slaTarget = Math.round(numeric * 100) / 100;
+      }
+
+      normalized.push({
+        id,
+        name,
+        description,
+        active,
+        ...(slaTarget !== null ? { slaTarget } : {})
+      });
+    }
+
+    return { categories: normalized };
+  }
+
+  function getStoredRequestCategories(settings) {
+    const source = Array.isArray(settings?.requestCategories) ? settings.requestCategories : [];
+    return source
+      .filter(item => item && typeof item === 'object')
+      .map((item, index) => {
+        const name = toNonEmptyString(item.name);
+        if (!name) return null;
+        const id = toNonEmptyString(item.id) || buildRequestCategoryId(name, index);
+        const description = typeof item.description === 'string' ? item.description.trim() : '';
+        const active = item.active !== false;
+        const numericSlaTarget = Number(item.slaTarget);
+        const hasSlaTarget = Number.isFinite(numericSlaTarget) && numericSlaTarget > 0;
+        return {
+          id,
+          name,
+          description,
+          active,
+          ...(hasSlaTarget ? { slaTarget: Math.round(numericSlaTarget * 100) / 100 } : {})
+        };
+      })
+      .filter(Boolean);
+  }
+
   const DEFAULT_CAREER_PAGE_TEMPLATE = {
     headerBackgroundColor: '#1e3a8a',
     header: `<div class="max-w-5xl mx-auto px-6 py-16">
@@ -4860,6 +4953,40 @@ init().then(async () => {
     } catch (err) {
       console.error('Failed to save post-login settings', err);
       res.status(500).json({ error: 'Unable to save post-login settings.' });
+    }
+  });
+
+  app.get('/settings/request-categories', authRequired, async (req, res) => {
+    try {
+      await db.read();
+      const allCategories = getStoredRequestCategories(db.data.settings);
+      const managerView = isManagerRole(req.user?.role);
+      const categories = managerView
+        ? allCategories
+        : allCategories.filter(category => category.active);
+      res.json({ categories });
+    } catch (err) {
+      console.error('Failed to load request category settings', err);
+      res.status(500).json({ error: 'Unable to load request categories.' });
+    }
+  });
+
+  app.put('/settings/request-categories', authRequired, managerOnly, async (req, res) => {
+    try {
+      const { categories, error } = normalizeRequestCategoriesPayload(req.body?.categories);
+      if (error) {
+        return res.status(400).json({ error });
+      }
+
+      await db.read();
+      db.data.settings = db.data.settings && typeof db.data.settings === 'object' ? db.data.settings : {};
+      db.data.settings.requestCategories = categories;
+      await db.write();
+
+      res.json({ categories });
+    } catch (err) {
+      console.error('Failed to save request category settings', err);
+      res.status(500).json({ error: 'Unable to save request categories.' });
     }
   });
 

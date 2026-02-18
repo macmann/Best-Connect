@@ -972,6 +972,11 @@ let organizationPendingLogoDataUrl = '';
 let careerPageSettings = null;
 let careerPageSettingsLoaded = false;
 let careerPageSettingsLoading = null;
+let requestCategories = [];
+let requestCategoriesLoaded = false;
+let requestCategoriesLoading = null;
+let requestCategoriesDirty = false;
+let requestCategoryEditingId = null;
 let settingsActiveSubtab = 'organization';
 let aiModelOptions = [
   { value: 'gpt-5', label: 'GPT5' },
@@ -1195,6 +1200,7 @@ const settingsSubtabPanels = {
   postLogin: document.querySelector('[data-settings-tab-panel="postLogin"]'),
   email: document.querySelector('[data-settings-tab-panel="email"]'),
   careerPage: document.querySelector('[data-settings-tab-panel="careerPage"]'),
+  requestCategories: document.querySelector('[data-settings-tab-panel="requestCategories"]'),
   apiTools: document.querySelector('[data-settings-tab-panel="apiTools"]')
 };
 const payrollSummaryBody = document.getElementById('payrollSummaryBody');
@@ -5044,6 +5050,7 @@ function loadSettingsSubtabData(name) {
   if (name === 'postLogin') loadPostLoginSettings();
   if (name === 'email') loadEmailSettingsConfig();
   if (name === 'careerPage') loadCareerPageSettings();
+  if (name === 'requestCategories') loadRequestCategoriesSettings();
 }
 
 function updateSettingsSubtab(name = 'organization') {
@@ -5073,6 +5080,295 @@ function updateSettingsSubtab(name = 'organization') {
   });
 
   loadSettingsSubtabData(name);
+}
+
+function setRequestCategoriesStatus(message, type = 'info') {
+  const statusEl = document.getElementById('requestCategoriesStatus');
+  if (!statusEl) return;
+  statusEl.textContent = message || '';
+  statusEl.classList.remove('settings-status--error', 'settings-status--success');
+  if (type === 'error') statusEl.classList.add('settings-status--error');
+  if (type === 'success') statusEl.classList.add('settings-status--success');
+}
+
+function normalizeRequestCategoryPayload(category = {}, index = 0) {
+  const name = typeof category?.name === 'string' ? category.name.trim() : '';
+  const description = typeof category?.description === 'string' ? category.description.trim() : '';
+  const active = category?.active !== false;
+  const payload = {
+    id: category?.id || `category-${index + 1}`,
+    name,
+    description,
+    active
+  };
+  if (category?.slaTarget !== undefined && category?.slaTarget !== null && category?.slaTarget !== '') {
+    const numericSlaTarget = Number(category.slaTarget);
+    if (Number.isFinite(numericSlaTarget) && numericSlaTarget > 0) {
+      payload.slaTarget = Math.round(numericSlaTarget * 100) / 100;
+    }
+  }
+  return payload;
+}
+
+function validateRequestCategories(categories = requestCategories) {
+  const seen = new Set();
+  for (let i = 0; i < categories.length; i += 1) {
+    const category = categories[i];
+    const name = typeof category?.name === 'string' ? category.name.trim() : '';
+    if (!name) {
+      return `Category name is required for row ${i + 1}.`;
+    }
+    const key = name.toLowerCase();
+    if (seen.has(key)) {
+      return `Duplicate category name found: ${name}.`;
+    }
+    seen.add(key);
+  }
+  return '';
+}
+
+function getRequestCategoriesPayload() {
+  return requestCategories.map((category, index) => normalizeRequestCategoryPayload(category, index));
+}
+
+function setRequestCategoryFormMode(isEditing) {
+  const submitBtn = document.getElementById('requestCategorySubmitBtn');
+  const cancelBtn = document.getElementById('requestCategoryCancelBtn');
+  if (submitBtn) {
+    submitBtn.innerHTML = isEditing
+      ? '<span class="material-symbols-rounded">save</span>Update category'
+      : '<span class="material-symbols-rounded">add</span>Add category';
+  }
+  if (cancelBtn) cancelBtn.classList.toggle('hidden', !isEditing);
+}
+
+function resetRequestCategoryForm() {
+  requestCategoryEditingId = null;
+  const form = document.getElementById('requestCategoryForm');
+  if (form) form.reset();
+  const activeInput = document.getElementById('requestCategoryActive');
+  if (activeInput) activeInput.checked = true;
+  const editInput = document.getElementById('requestCategoryEditId');
+  if (editInput) editInput.value = '';
+  setRequestCategoryFormMode(false);
+}
+
+function markRequestCategoriesDirty() {
+  requestCategoriesDirty = true;
+  setRequestCategoriesStatus('You have unsaved request category changes.', 'info');
+}
+
+function moveRequestCategory(index, direction) {
+  const targetIndex = index + direction;
+  if (targetIndex < 0 || targetIndex >= requestCategories.length) return;
+  const [item] = requestCategories.splice(index, 1);
+  requestCategories.splice(targetIndex, 0, item);
+  markRequestCategoriesDirty();
+  renderRequestCategories();
+}
+
+function onRequestCategoriesListClick(event) {
+  const actionButton = event.target.closest('button[data-request-category-action]');
+  if (!actionButton) return;
+
+  const action = actionButton.dataset.requestCategoryAction;
+  const categoryId = actionButton.dataset.categoryId;
+  const index = requestCategories.findIndex(category => String(category.id) === String(categoryId));
+  if (index < 0) return;
+
+  if (action === 'edit') {
+    const category = requestCategories[index];
+    requestCategoryEditingId = category.id;
+    const editInput = document.getElementById('requestCategoryEditId');
+    const nameInput = document.getElementById('requestCategoryName');
+    const descriptionInput = document.getElementById('requestCategoryDescription');
+    const slaInput = document.getElementById('requestCategorySlaTarget');
+    const activeInput = document.getElementById('requestCategoryActive');
+    if (editInput) editInput.value = category.id || '';
+    if (nameInput) nameInput.value = category.name || '';
+    if (descriptionInput) descriptionInput.value = category.description || '';
+    if (slaInput) slaInput.value = category.slaTarget ?? '';
+    if (activeInput) activeInput.checked = category.active !== false;
+    setRequestCategoryFormMode(true);
+    if (nameInput) nameInput.focus();
+    return;
+  }
+
+  if (action === 'remove') {
+    requestCategories.splice(index, 1);
+    markRequestCategoriesDirty();
+    renderRequestCategories();
+    if (requestCategoryEditingId === categoryId) resetRequestCategoryForm();
+    return;
+  }
+
+  if (action === 'up') {
+    moveRequestCategory(index, -1);
+    return;
+  }
+
+  if (action === 'down') {
+    moveRequestCategory(index, 1);
+  }
+}
+
+function renderRequestCategories() {
+  const listEl = document.getElementById('requestCategoriesList');
+  if (!listEl) return;
+
+  if (!requestCategories.length) {
+    listEl.innerHTML = '<p class="text-muted">No categories configured.</p>';
+  } else {
+    const rows = requestCategories.map((category, index) => {
+      const slaText = category.slaTarget ? `${category.slaTarget} hrs` : 'No SLA';
+      const description = category.description || 'No description provided.';
+      return `
+        <div class="md-card" style="margin-bottom: 0.75rem;">
+          <div class="card-title" style="display:flex;justify-content:space-between;gap:0.75rem;align-items:center;">
+            <span>${escapeHtml(category.name)} ${category.active === false ? '<span class="text-muted">(inactive)</span>' : ''}</span>
+            <span class="text-muted">${escapeHtml(slaText)}</span>
+          </div>
+          <p class="card-subtitle">${escapeHtml(description)}</p>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <button type="button" class="md-button md-button--outlined md-button--small" data-request-category-action="up" data-category-id="${escapeHtml(category.id)}" ${index === 0 ? 'disabled' : ''}>↑</button>
+            <button type="button" class="md-button md-button--outlined md-button--small" data-request-category-action="down" data-category-id="${escapeHtml(category.id)}" ${index === requestCategories.length - 1 ? 'disabled' : ''}>↓</button>
+            <button type="button" class="md-button md-button--outlined md-button--small" data-request-category-action="edit" data-category-id="${escapeHtml(category.id)}">Edit</button>
+            <button type="button" class="md-button md-button--outlined md-button--small" data-request-category-action="remove" data-category-id="${escapeHtml(category.id)}">Remove</button>
+          </div>
+        </div>`;
+    }).join('');
+    listEl.innerHTML = rows;
+  }
+
+  if (!listEl.dataset.bound) {
+    listEl.addEventListener('click', onRequestCategoriesListClick);
+    listEl.dataset.bound = 'true';
+  }
+}
+
+async function fetchRequestCategoriesSettings({ force = false } = {}) {
+  if (requestCategoriesLoading && !force) return requestCategoriesLoading;
+  requestCategoriesLoading = (async () => {
+    const res = await apiFetch('/settings/request-categories');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Unable to load request categories.');
+    return Array.isArray(data.categories) ? data.categories : [];
+  })();
+
+  try {
+    const categories = await requestCategoriesLoading;
+    requestCategories = categories.map((category, index) => normalizeRequestCategoryPayload(category, index));
+    requestCategoriesLoaded = true;
+    requestCategoriesDirty = false;
+    renderRequestCategories();
+    return requestCategories;
+  } finally {
+    requestCategoriesLoading = null;
+  }
+}
+
+async function loadRequestCategoriesSettings({ force = false, silent = false } = {}) {
+  if (requestCategoriesLoaded && !force) {
+    if (!silent) setRequestCategoriesStatus('Request categories loaded.');
+    renderRequestCategories();
+    return requestCategories;
+  }
+  if (!silent) setRequestCategoriesStatus('Loading request categories...');
+  try {
+    await fetchRequestCategoriesSettings({ force });
+    if (!silent) setRequestCategoriesStatus('Request categories loaded.');
+  } catch (err) {
+    console.error('Unable to load request categories', err);
+    if (!silent) setRequestCategoriesStatus(err.message || 'Unable to load request categories.', 'error');
+  }
+  return requestCategories;
+}
+
+function onRequestCategoryFormSubmit(event) {
+  event.preventDefault();
+  const nameInput = document.getElementById('requestCategoryName');
+  const descriptionInput = document.getElementById('requestCategoryDescription');
+  const slaInput = document.getElementById('requestCategorySlaTarget');
+  const activeInput = document.getElementById('requestCategoryActive');
+
+  const name = nameInput?.value?.trim() || '';
+  if (!name) {
+    setRequestCategoriesStatus('Category name is required.', 'error');
+    if (nameInput) nameInput.focus();
+    return;
+  }
+
+  const draft = {
+    id: requestCategoryEditingId || `category-${Date.now()}`,
+    name,
+    description: descriptionInput?.value?.trim() || '',
+    active: Boolean(activeInput?.checked)
+  };
+  const slaRaw = slaInput?.value?.trim();
+  if (slaRaw) {
+    const slaTarget = Number(slaRaw);
+    if (!Number.isFinite(slaTarget) || slaTarget <= 0) {
+      setRequestCategoriesStatus('SLA target must be a positive number.', 'error');
+      return;
+    }
+    draft.slaTarget = Math.round(slaTarget * 100) / 100;
+  }
+
+  if (requestCategoryEditingId) {
+    const existingIndex = requestCategories.findIndex(item => String(item.id) === String(requestCategoryEditingId));
+    if (existingIndex >= 0) {
+      requestCategories[existingIndex] = draft;
+    }
+  } else {
+    requestCategories.push(draft);
+  }
+
+  const validationError = validateRequestCategories(requestCategories);
+  if (validationError) {
+    setRequestCategoriesStatus(validationError, 'error');
+    return;
+  }
+
+  markRequestCategoriesDirty();
+  renderRequestCategories();
+  resetRequestCategoryForm();
+}
+
+async function onRequestCategoriesSave() {
+  const validationError = validateRequestCategories(requestCategories);
+  if (validationError) {
+    setRequestCategoriesStatus(validationError, 'error');
+    return;
+  }
+
+  const payload = getRequestCategoriesPayload();
+  const saveBtn = document.getElementById('requestCategoriesSaveBtn');
+  setButtonLoading(saveBtn, true);
+  setRequestCategoriesStatus('Saving request categories...');
+
+  try {
+    const res = await apiFetch('/settings/request-categories', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categories: payload })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Unable to save request categories.');
+
+    requestCategories = Array.isArray(data.categories)
+      ? data.categories.map((category, index) => normalizeRequestCategoryPayload(category, index))
+      : payload;
+    requestCategoriesDirty = false;
+    requestCategoriesLoaded = true;
+    renderRequestCategories();
+    resetRequestCategoryForm();
+    setRequestCategoriesStatus('Request categories saved successfully.', 'success');
+  } catch (err) {
+    console.error('Failed to save request categories', err);
+    setRequestCategoriesStatus(err.message || 'Unable to save request categories.', 'error');
+  } finally {
+    setButtonLoading(saveBtn, false);
+  }
 }
 
 function getCareerPageBuilderTemplate(settings = {}) {
@@ -9875,6 +10171,12 @@ async function init() {
   if (chatWidgetDefaultBtn) chatWidgetDefaultBtn.addEventListener('click', resetChatWidgetUrlToDefault);
   const postLoginForm = document.getElementById('postLoginSettingsForm');
   if (postLoginForm) postLoginForm.addEventListener('submit', onPostLoginSettingsSubmit);
+  const requestCategoryForm = document.getElementById('requestCategoryForm');
+  if (requestCategoryForm) requestCategoryForm.addEventListener('submit', onRequestCategoryFormSubmit);
+  const requestCategoryCancelBtn = document.getElementById('requestCategoryCancelBtn');
+  if (requestCategoryCancelBtn) requestCategoryCancelBtn.addEventListener('click', resetRequestCategoryForm);
+  const requestCategoriesSaveBtn = document.getElementById('requestCategoriesSaveBtn');
+  if (requestCategoriesSaveBtn) requestCategoriesSaveBtn.addEventListener('click', onRequestCategoriesSave);
   const careerPageForm = document.getElementById('careerPageSettingsForm');
   if (careerPageForm) careerPageForm.addEventListener('submit', onCareerPageSettingsSubmit);
   ['careerPageHeaderBackgroundColor', 'careerPageHeaderHtml', 'careerPageUpdatesHtml', 'careerPageContentHtml', 'careerPageFooterHtml'].forEach(id => {
