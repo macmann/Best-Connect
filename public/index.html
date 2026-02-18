@@ -5094,6 +5094,30 @@
           </div>
         </div>
 
+        <div class="md-card performance-card" style="margin-bottom: 14px;">
+          <div class="card-title">
+            <span class="material-symbols-rounded">rocket_launch</span>
+            Cycle kickoff &amp; reporting
+          </div>
+          <p class="card-subtitle">Set cycle year, then generate final report with self appraisal, manager comments, and ranking.</p>
+          <div class="form-row two-col">
+            <div>
+              <label class="md-label" for="performanceCycleYear">Cycle Year</label>
+              <input id="performanceCycleYear" class="md-input" type="number" min="2020" max="2100" />
+            </div>
+            <div style="display:flex; align-items:flex-end; gap:10px;">
+              <button id="performanceCycleKickoff" type="button" class="md-button md-button--outlined">
+                <span class="material-symbols-rounded">play_circle</span>
+                Kick off cycle
+              </button>
+              <button id="performanceGenerateReport" type="button" class="md-button">
+                <span class="material-symbols-rounded">picture_as_pdf</span>
+                Generate PDF report
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div class="performance-grid">
           <div class="md-card performance-card">
             <div class="card-title">
@@ -5229,6 +5253,21 @@
               <div class="form-row">
                 <label class="md-label" for="yearEndManager">Manager notes</label>
                 <textarea id="yearEndManager" class="md-textarea" rows="2" placeholder="Calibration-friendly notes"></textarea>
+              </div>
+              <div class="form-row">
+                <label class="md-label" for="yearEndRanking">Manager final ranking</label>
+                <select id="yearEndRanking" class="md-select">
+                  <option value="">-- select 9-box ranking --</option>
+                  <option value="top_performer">Top performer (9)</option>
+                  <option value="future_leader">Future leader (8)</option>
+                  <option value="high_impact">High impact performer (7)</option>
+                  <option value="strong_core">Strong core contributor (6)</option>
+                  <option value="solid_reliable">Solid &amp; reliable (5)</option>
+                  <option value="inconsistent_growth">Inconsistent, needs growth (4)</option>
+                  <option value="new_in_role">New in role, promising (3)</option>
+                  <option value="at_risk">At risk performer (2)</option>
+                  <option value="under_performer">Under performer (1)</option>
+                </select>
               </div>
               <div id="yearEndGoals" class="performance-list"></div>
               <div id="yearEndCompetencies" class="performance-list"></div>

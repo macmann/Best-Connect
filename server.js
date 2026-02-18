@@ -11,6 +11,7 @@ const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const PDFDocument = require('pdfkit');
+const OpenAI = require('openai');
 const { db, init, getDatabase } = require('./db');
 const {
   DEFAULT_LEAVE_BALANCES,
@@ -171,6 +172,85 @@ function canAccessPerformanceRecord(user, employeeId) {
   return String(user.employeeId) === String(employeeId);
 }
 
+
+
+const PERFORMANCE_RANKING_LABELS = {
+  top_performer: 'Top performer (9)',
+  future_leader: 'Future leader (8)',
+  high_impact: 'High impact performer (7)',
+  strong_core: 'Strong core contributor (6)',
+  solid_reliable: 'Solid & reliable (5)',
+  inconsistent_growth: 'Inconsistent, needs growth (4)',
+  new_in_role: 'New in role, promising (3)',
+  at_risk: 'At risk performer (2)',
+  under_performer: 'Under performer (1)'
+};
+
+function getEmployeeStartDate(employee) {
+  if (!employee || typeof employee !== 'object') return '';
+  return employee.startDateFullTime
+    || employee['Start Date - Full Time']
+    || employee.startDate
+    || employee.joinDate
+    || employee.joiningDate
+    || '';
+}
+
+function tryReadDataUrlBuffer(value) {
+  if (typeof value !== 'string') return null;
+  const match = value.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return null;
+  try {
+    return Buffer.from(match[2], 'base64');
+  } catch (_err) {
+    return null;
+  }
+}
+
+async function buildPerformanceCycleAiSummary({ cycleYear, employeeRows }) {
+  if (!process.env.OPENAI_API_KEY || !Array.isArray(employeeRows) || !employeeRows.length) {
+    return null;
+  }
+  try {
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const digest = employeeRows.slice(0, 50).map((row, idx) => (
+      `${idx + 1}. ${row.name} | ${row.role || 'N/A'} | ${row.department || 'N/A'} | Ranking: ${row.ranking} | Overall: ${row.overallScore ?? 'N/A'}`
+    )).join('\n');
+    const prompt = [
+      `Generate a concise HR performance cycle executive summary for cycle ${cycleYear}.`,
+      'Mention distribution themes and management follow-ups in plain business language.',
+      'Keep under 140 words.',
+      '',
+      'Employee digest:',
+      digest
+    ].join('\n');
+
+    const completion = await client.chat.completions.create({
+      model: process.env.OPENAI_PERFORMANCE_REPORT_MODEL || 'gpt-5.1-mini',
+      messages: [
+        { role: 'system', content: 'You are an HR analytics assistant. Respond with plain text only.' },
+        { role: 'user', content: prompt }
+      ]
+    });
+    return completion?.choices?.[0]?.message?.content?.trim() || null;
+  } catch (err) {
+    console.warn('Failed to build AI summary for performance cycle report:', err?.message || err);
+    return null;
+  }
+}
+
+function drawPerformanceReportHeader(doc, { organization, cycleYear, aiSummary }) {
+  doc.fontSize(18).font('Helvetica-Bold').text(`${organization} · Performance Cycle Report`);
+  doc.moveDown(0.25);
+  doc.fontSize(11).font('Helvetica').text(`Cycle year: ${cycleYear}`);
+  doc.text(`Generated at: ${new Date().toLocaleString()}`);
+  if (aiSummary) {
+    doc.moveDown(0.5);
+    doc.fontSize(10).font('Helvetica-Oblique').text(`Executive summary: ${aiSummary}`);
+  }
+  doc.moveDown(0.75);
+}
+
 function buildPerformanceTemplate(employeeId) {
   return {
     _id: crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(12).toString('hex'),
@@ -186,6 +266,7 @@ function buildPerformanceTemplate(employeeId) {
     yearEnd: {
       selfReview: '',
       managerReview: '',
+      rankingCategory: '',
       goalScores: [],
       competencyScores: [],
       overallScore: null
@@ -2869,6 +2950,106 @@ init().then(async () => {
   });
 
   // ========== PERFORMANCE REVIEWS ==========
+
+
+  app.get('/api/performance/report', authRequired, async (req, res) => {
+    try {
+      await db.read();
+      const cycleYear = Number(req.query.cycleYear || new Date().getFullYear());
+      const requestedEmployeeId = req.query.employeeId ? String(req.query.employeeId) : '';
+      if (!Number.isInteger(cycleYear) || cycleYear < 2020 || cycleYear > 2100) {
+        return res.status(400).json({ error: 'Invalid cycle year.' });
+      }
+
+      const employees = Array.isArray(db.data.employees) ? db.data.employees : [];
+      const reviews = Array.isArray(db.data.performanceReviews) ? db.data.performanceReviews : [];
+      const isManager = isManagerRole(req.user?.role) || isSuperAdminRole(req.user?.role);
+      let accessibleEmployees = employees;
+
+      if (!isManager) {
+        accessibleEmployees = employees.filter(e => String(e.id) === String(req.user?.employeeId));
+      }
+      if (requestedEmployeeId) {
+        accessibleEmployees = accessibleEmployees.filter(e => String(e.id) === requestedEmployeeId);
+      }
+      if (!accessibleEmployees.length) {
+        return res.status(404).json({ error: 'No accessible employee records found for this report.' });
+      }
+
+      const reportRows = accessibleEmployees
+        .map(employee => {
+          const review = reviews.find(r => String(r.employeeId) === String(employee.id) && Number(r.cycleYear) === cycleYear);
+          if (!review) return null;
+          const yearEnd = review.yearEnd || {};
+          return {
+            employeeId: String(employee.id),
+            name: employee.name || `Employee ${employee.id}`,
+            email: employee.email || '',
+            title: employee.title || employee.position || '',
+            role: employee.role || '',
+            department: employee.department || '',
+            status: employee.status || '',
+            startDate: getEmployeeStartDate(employee),
+            selfReview: yearEnd.selfReview || '',
+            managerReview: yearEnd.managerReview || '',
+            ranking: PERFORMANCE_RANKING_LABELS[yearEnd.rankingCategory] || 'Unranked',
+            overallScore: yearEnd.overallScore ?? null
+          };
+        })
+        .filter(Boolean);
+
+      if (!reportRows.length) {
+        return res.status(404).json({ error: 'No performance data found for the selected cycle.' });
+      }
+
+      const orgSettings = db.data.settings?.organization || {};
+      const organizationName = orgSettings.name || 'Company';
+      const logoBuffer = tryReadDataUrlBuffer(orgSettings.logoUrl);
+      const aiSummary = await buildPerformanceCycleAiSummary({ cycleYear, employeeRows: reportRows });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="performance-cycle-${cycleYear}.pdf"`);
+
+      const doc = new PDFDocument({ margin: 40, size: 'A4' });
+      doc.pipe(res);
+
+      if (logoBuffer) {
+        try {
+          doc.image(logoBuffer, 40, 32, { fit: [70, 45] });
+          doc.x = 120;
+          doc.y = 40;
+        } catch (_err) {
+          // ignore invalid logos and continue report generation
+        }
+      }
+      drawPerformanceReportHeader(doc, { organization: organizationName, cycleYear, aiSummary });
+
+      reportRows.forEach((row, index) => {
+        if (index > 0) {
+          doc.moveDown(0.8);
+          doc.strokeColor('#d9d9d9').lineWidth(1).moveTo(40, doc.y).lineTo(555, doc.y).stroke();
+          doc.moveDown(0.6);
+        }
+        doc.font('Helvetica-Bold').fontSize(12).text(`${row.name} (${row.employeeId})`);
+        doc.font('Helvetica').fontSize(10);
+        doc.text(`Title: ${row.title || '-'}   Department: ${row.department || '-'}   Start date: ${row.startDate || '-'}`);
+        doc.text(`Email: ${row.email || '-'}   Status: ${row.status || '-'}   Role: ${row.role || '-'}`);
+        doc.text(`Final ranking: ${row.ranking}   Weighted score: ${row.overallScore ?? '-'}`);
+        doc.moveDown(0.2);
+        doc.font('Helvetica-Bold').text('Self appraisal:');
+        doc.font('Helvetica').text(row.selfReview || '-', { width: 500 });
+        doc.moveDown(0.2);
+        doc.font('Helvetica-Bold').text('Manager comments:');
+        doc.font('Helvetica').text(row.managerReview || '-', { width: 500 });
+      });
+
+      doc.end();
+    } catch (err) {
+      console.error('Failed to generate performance cycle report', err);
+      res.status(500).json({ error: 'Unable to generate performance cycle report.' });
+    }
+  });
+
   app.get('/api/performance/:employeeId', authRequired, async (req, res) => {
     const { employeeId } = req.params;
     await db.read();
