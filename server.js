@@ -364,7 +364,39 @@ const DEFAULT_LEAVE_EMAIL_TEMPLATES = {
     'Thank you for your understanding.'
   ].join('\n'),
   cancelSubject: 'Leave cancelled',
-  cancelBody: '{name}, your leave from {from} to {to} has been cancelled.'
+  cancelBody: '{name}, your leave from {from} to {to} has been cancelled.',
+  requestCreatedSubject: 'Request {requestId} created: {requestType}',
+  requestCreatedBody: [
+    'A new request ticket has been created.',
+    '',
+    'Request ID: {requestId}',
+    'Request type: {requestType}',
+    'Status: {status}',
+    'Requested at: {requestedAt}'
+  ].join('\n'),
+  requestUpdatedSubject: 'Request {requestId} updated: {status}',
+  requestUpdatedBody: [
+    'Your request has been updated.',
+    '',
+    'Request ID: {requestId}',
+    'Request type: {requestType}',
+    'Status: {status}',
+    'Requested at: {requestedAt}',
+    '',
+    '{managerNote}'
+  ].join('\n'),
+  requestClosedSubject: 'Request {requestId} closed',
+  requestClosedBody: [
+    'Your request has been closed.',
+    '',
+    'Request ID: {requestId}',
+    'Request type: {requestType}',
+    'Status: {status}',
+    'Requested at: {requestedAt}',
+    'Closed at: {closedAt}',
+    '',
+    '{managerNote}'
+  ].join('\n')
 };
 
 function getEnvEmailSettings() {
@@ -1116,6 +1148,82 @@ function appendRequestAuditEntry(requestRecord, entry = {}) {
   if (!requestRecord || typeof requestRecord !== 'object') return;
   requestRecord.audit = Array.isArray(requestRecord.audit) ? requestRecord.audit : [];
   requestRecord.audit.push(entry);
+}
+
+function buildRequestTemplateVars(requestRecord, overrides = {}) {
+  const requestType = requestRecord?.categoryName || requestRecord?.categoryId || 'General';
+  return {
+    requestId: requestRecord?.id || '',
+    requestType,
+    status: normalizeRequestStatus(requestRecord?.status) || 'open',
+    requestedAt: requestRecord?.requestedAt || '',
+    closedAt: requestRecord?.closedAt || '',
+    managerNote: toNonEmptyString(requestRecord?.result?.message),
+    ...overrides
+  };
+}
+
+async function sendRequestCreatedNotification(requestRecord, dbData = {}) {
+  const emailConfig = await loadEmailSettings();
+  const templates = emailConfig?.templates || DEFAULT_LEAVE_EMAIL_TEMPLATES;
+  const requester = (dbData?.employees || []).find(
+    employee => normalizeEmployeeId(employee?.id) === normalizeEmployeeId(requestRecord?.requesterEmployeeId)
+  );
+
+  const recipientSet = new Set();
+  const managerRecipients = resolveEmployeeManagers(requester, dbData);
+  managerRecipients.forEach(manager => {
+    const email = toNonEmptyString(manager?.email).toLowerCase();
+    if (email) recipientSet.add(email);
+  });
+
+  (emailConfig?.recipients || []).forEach(value => {
+    const email = toNonEmptyString(value).toLowerCase();
+    if (email) recipientSet.add(email);
+  });
+
+  if (!recipientSet.size) {
+    (dbData?.users || [])
+      .filter(user => isManagerRole(user?.role))
+      .forEach(user => {
+        const email = toNonEmptyString(user?.email).toLowerCase();
+        if (email) recipientSet.add(email);
+      });
+  }
+
+  if (!recipientSet.size && ADMIN_EMAIL) {
+    recipientSet.add(ADMIN_EMAIL.toLowerCase());
+  }
+
+  const recipients = Array.from(recipientSet.values());
+  if (!recipients.length) return;
+
+  const templateVars = buildRequestTemplateVars(requestRecord);
+  await sendEmail(
+    recipients,
+    renderTemplate(templates.requestCreatedSubject, templateVars),
+    renderTemplate(templates.requestCreatedBody, templateVars)
+  );
+}
+
+async function sendRequestUpdateNotification(requestRecord, dbData = {}, options = {}) {
+  const requester = (dbData?.employees || []).find(
+    employee => normalizeEmployeeId(employee?.id) === normalizeEmployeeId(requestRecord?.requesterEmployeeId)
+  );
+  const recipientEmail = toNonEmptyString(getEmpEmail(requester));
+  if (!recipientEmail) return;
+
+  const emailConfig = await loadEmailSettings();
+  const templates = emailConfig?.templates || DEFAULT_LEAVE_EMAIL_TEMPLATES;
+  const managerNote = toNonEmptyString(options.managerNote);
+  const templateVars = buildRequestTemplateVars(requestRecord, { managerNote });
+  const isClosed = normalizeRequestStatus(requestRecord?.status) === 'closed';
+
+  await sendEmail(
+    recipientEmail,
+    renderTemplate(isClosed ? templates.requestClosedSubject : templates.requestUpdatedSubject, templateVars),
+    renderTemplate(isClosed ? templates.requestClosedBody : templates.requestUpdatedBody, templateVars)
+  );
 }
 
 function toRequestResponse(requestRecord) {
@@ -6428,6 +6536,8 @@ init().then(async () => {
     db.data.requests.push(requestRecord);
     await db.write();
 
+    await sendRequestCreatedNotification(requestRecord, db.data);
+
     return res.status(201).json(toRequestResponse(requestRecord));
   });
 
@@ -6594,6 +6704,7 @@ init().then(async () => {
     });
 
     await db.write();
+    await sendRequestUpdateNotification(requestRecord, db.data);
     return res.json(toRequestResponse(requestRecord));
   });
 
@@ -6646,6 +6757,7 @@ init().then(async () => {
     });
 
     await db.write();
+    await sendRequestUpdateNotification(requestRecord, db.data, { managerNote: message });
     return res.json(toRequestResponse(requestRecord));
   });
 
