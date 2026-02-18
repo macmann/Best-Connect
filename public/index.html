@@ -7597,6 +7597,52 @@
                 <textarea id="emailTemplateCancelBody" class="md-input md-input--textarea" rows="3" placeholder="{name}, your leave from {from} to {to} has been cancelled."></textarea>
               </div>
             </div>
+            <div class="settings-form__fields settings-form__fields--full">
+              <span class="md-label">Request portal notification templates</span>
+              <p class="settings-form__help">Use placeholders <code>{requestId}</code>, <code>{requestType}</code>, <code>{status}</code>, <code>{requestedAt}</code>, <code>{closedAt}</code>, and <code>{managerNote}</code>.</p>
+            </div>
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label" for="emailTemplateRequestCreatedSubject">Request created subject</label>
+              <div class="md-input-wrapper">
+                <span class="material-symbols-rounded">subject</span>
+                <input type="text" id="emailTemplateRequestCreatedSubject" class="md-input" placeholder="Request {requestId} created: {requestType}">
+              </div>
+            </div>
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label" for="emailTemplateRequestCreatedBody">Request created body</label>
+              <div class="md-input-wrapper md-input-wrapper--textarea">
+                <span class="material-symbols-rounded">notes</span>
+                <textarea id="emailTemplateRequestCreatedBody" class="md-input md-input--textarea" rows="4" placeholder="A new request ticket has been created."></textarea>
+              </div>
+            </div>
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label" for="emailTemplateRequestUpdatedSubject">Request updated subject</label>
+              <div class="md-input-wrapper">
+                <span class="material-symbols-rounded">update</span>
+                <input type="text" id="emailTemplateRequestUpdatedSubject" class="md-input" placeholder="Request {requestId} updated: {status}">
+              </div>
+            </div>
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label" for="emailTemplateRequestUpdatedBody">Request updated body</label>
+              <div class="md-input-wrapper md-input-wrapper--textarea">
+                <span class="material-symbols-rounded">mail</span>
+                <textarea id="emailTemplateRequestUpdatedBody" class="md-input md-input--textarea" rows="4" placeholder="Your request has been updated."></textarea>
+              </div>
+            </div>
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label" for="emailTemplateRequestClosedSubject">Request closed subject</label>
+              <div class="md-input-wrapper">
+                <span class="material-symbols-rounded">task_alt</span>
+                <input type="text" id="emailTemplateRequestClosedSubject" class="md-input" placeholder="Request {requestId} closed">
+              </div>
+            </div>
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label" for="emailTemplateRequestClosedBody">Request closed body</label>
+              <div class="md-input-wrapper md-input-wrapper--textarea">
+                <span class="material-symbols-rounded">drafts</span>
+                <textarea id="emailTemplateRequestClosedBody" class="md-input md-input--textarea" rows="4" placeholder="Your request has been closed."></textarea>
+              </div>
+            </div>
             <div class="settings-form__help" id="emailPasswordHelp">Password is stored securely. Leave blank to keep the current password.</div>
             <div class="settings-form__help auth-section auth-section--oauth hidden" id="emailOAuthClientSecretHelp">Client secret is stored securely. Leave blank to keep the current value.</div>
             <div class="settings-form__help auth-section auth-section--oauth hidden" id="emailOAuthRefreshTokenHelp">Provide a refresh token only if using delegated permissions. Leave blank to keep the current value.</div>

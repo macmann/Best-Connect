@@ -944,7 +944,13 @@ const DEFAULT_LEAVE_EMAIL_TEMPLATES = {
     'Thank you for your understanding.'
   ].join('\n'),
   cancelSubject: 'Leave cancelled',
-  cancelBody: '{name}, your leave from {from} to {to} has been cancelled.'
+  cancelBody: '{name}, your leave from {from} to {to} has been cancelled.',
+  requestCreatedSubject: 'Request {requestId} created: {requestType}',
+  requestCreatedBody: 'A new request ticket has been created.\n\nRequest ID: {requestId}\nRequest type: {requestType}\nStatus: {status}\nRequested at: {requestedAt}',
+  requestUpdatedSubject: 'Request {requestId} updated: {status}',
+  requestUpdatedBody: 'Your request has been updated.\n\nRequest ID: {requestId}\nRequest type: {requestType}\nStatus: {status}\nRequested at: {requestedAt}\n\n{managerNote}',
+  requestClosedSubject: 'Request {requestId} closed',
+  requestClosedBody: 'Your request has been closed.\n\nRequest ID: {requestId}\nRequest type: {requestType}\nStatus: {status}\nRequested at: {requestedAt}\nClosed at: {closedAt}\n\n{managerNote}'
 };
 let emailSettings = null;
 let emailSettingsLoaded = false;
@@ -1834,6 +1840,7 @@ async function onRequestPortalManagerSave(requestId) {
     }
 
     setRequestPortalAllRequestsStatus('Request updated successfully.', 'success');
+    showToast('Request updated successfully.', 'success');
     await Promise.all([
       loadRequestPortalAllRequests({ silent: true }),
       loadRequestPortalMyRequests()
@@ -1941,6 +1948,7 @@ async function onRequestPortalSubmit(event) {
     if (categorySelect) categorySelect.value = '';
 
     setRequestPortalFormStatus(`Request submitted successfully (ID: ${data?.id || 'generated'}).`, 'success');
+    showToast(`Request submitted successfully (ID: ${data?.id || 'generated'}).`, 'success');
     updateRequestPortalSubtab('mine');
     await loadRequestPortalMyRequests();
   } catch (err) {
@@ -7543,6 +7551,12 @@ function renderEmailSettingsForm() {
   const templateRejectBody = document.getElementById('emailTemplateRejectBody');
   const templateCancelSubject = document.getElementById('emailTemplateCancelSubject');
   const templateCancelBody = document.getElementById('emailTemplateCancelBody');
+  const templateRequestCreatedSubject = document.getElementById('emailTemplateRequestCreatedSubject');
+  const templateRequestCreatedBody = document.getElementById('emailTemplateRequestCreatedBody');
+  const templateRequestUpdatedSubject = document.getElementById('emailTemplateRequestUpdatedSubject');
+  const templateRequestUpdatedBody = document.getElementById('emailTemplateRequestUpdatedBody');
+  const templateRequestClosedSubject = document.getElementById('emailTemplateRequestClosedSubject');
+  const templateRequestClosedBody = document.getElementById('emailTemplateRequestClosedBody');
   const settings = emailSettings || {};
   if (enabledInput) enabledInput.checked = Boolean(settings.enabled);
   const provider = settings.provider === 'office365' ? 'office365' : 'custom';
@@ -7650,6 +7664,12 @@ function renderEmailSettingsForm() {
   if (templateRejectBody) templateRejectBody.value = templates.rejectBody || '';
   if (templateCancelSubject) templateCancelSubject.value = templates.cancelSubject || '';
   if (templateCancelBody) templateCancelBody.value = templates.cancelBody || '';
+  if (templateRequestCreatedSubject) templateRequestCreatedSubject.value = templates.requestCreatedSubject || '';
+  if (templateRequestCreatedBody) templateRequestCreatedBody.value = templates.requestCreatedBody || '';
+  if (templateRequestUpdatedSubject) templateRequestUpdatedSubject.value = templates.requestUpdatedSubject || '';
+  if (templateRequestUpdatedBody) templateRequestUpdatedBody.value = templates.requestUpdatedBody || '';
+  if (templateRequestClosedSubject) templateRequestClosedSubject.value = templates.requestClosedSubject || '';
+  if (templateRequestClosedBody) templateRequestClosedBody.value = templates.requestClosedBody || '';
   if (provider !== 'office365') {
     rememberCustomEmailSettings();
   }
@@ -7757,6 +7777,12 @@ async function onEmailSettingsSubmit(ev) {
     const templateRejectBody = document.getElementById('emailTemplateRejectBody');
     const templateCancelSubject = document.getElementById('emailTemplateCancelSubject');
     const templateCancelBody = document.getElementById('emailTemplateCancelBody');
+    const templateRequestCreatedSubject = document.getElementById('emailTemplateRequestCreatedSubject');
+    const templateRequestCreatedBody = document.getElementById('emailTemplateRequestCreatedBody');
+    const templateRequestUpdatedSubject = document.getElementById('emailTemplateRequestUpdatedSubject');
+    const templateRequestUpdatedBody = document.getElementById('emailTemplateRequestUpdatedBody');
+    const templateRequestClosedSubject = document.getElementById('emailTemplateRequestClosedSubject');
+    const templateRequestClosedBody = document.getElementById('emailTemplateRequestClosedBody');
     const recipientInputs = Array.from(document.querySelectorAll('input[name="emailRecipients"]'));
     const selectedRecipients = recipientInputs
       .filter(input => input instanceof HTMLInputElement && input.checked)
@@ -7790,7 +7816,13 @@ async function onEmailSettingsSubmit(ev) {
         rejectSubject: templateRejectSubject?.value?.trim() || DEFAULT_LEAVE_EMAIL_TEMPLATES.rejectSubject,
         rejectBody: templateRejectBody?.value?.trim() || DEFAULT_LEAVE_EMAIL_TEMPLATES.rejectBody,
         cancelSubject: templateCancelSubject?.value?.trim() || DEFAULT_LEAVE_EMAIL_TEMPLATES.cancelSubject,
-        cancelBody: templateCancelBody?.value?.trim() || DEFAULT_LEAVE_EMAIL_TEMPLATES.cancelBody
+        cancelBody: templateCancelBody?.value?.trim() || DEFAULT_LEAVE_EMAIL_TEMPLATES.cancelBody,
+        requestCreatedSubject: templateRequestCreatedSubject?.value?.trim() || DEFAULT_LEAVE_EMAIL_TEMPLATES.requestCreatedSubject,
+        requestCreatedBody: templateRequestCreatedBody?.value?.trim() || DEFAULT_LEAVE_EMAIL_TEMPLATES.requestCreatedBody,
+        requestUpdatedSubject: templateRequestUpdatedSubject?.value?.trim() || DEFAULT_LEAVE_EMAIL_TEMPLATES.requestUpdatedSubject,
+        requestUpdatedBody: templateRequestUpdatedBody?.value?.trim() || DEFAULT_LEAVE_EMAIL_TEMPLATES.requestUpdatedBody,
+        requestClosedSubject: templateRequestClosedSubject?.value?.trim() || DEFAULT_LEAVE_EMAIL_TEMPLATES.requestClosedSubject,
+        requestClosedBody: templateRequestClosedBody?.value?.trim() || DEFAULT_LEAVE_EMAIL_TEMPLATES.requestClosedBody
       }
     };
     const wantsRefreshToken = payload.updateRefreshToken
