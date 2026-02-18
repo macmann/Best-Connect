@@ -1,6 +1,27 @@
 const jobListEl = document.getElementById('job-list');
 const jobDetailEl = document.getElementById('job-detail');
 const careersBrandLogoEl = document.getElementById('careersBrandLogo');
+const careersBrandLogoLinkEl = document.getElementById('careersBrandLogoLink');
+const careerNavLinkElements = {
+  home: document.getElementById('careerNavHome'),
+  about: document.getElementById('careerNavAbout'),
+  solutions: document.getElementById('careerNavSolutions'),
+  partners: document.getElementById('careerNavPartners'),
+  contact: document.getElementById('careerNavContact'),
+  careers: document.getElementById('careerNavCareers')
+};
+
+const DEFAULT_CAREER_PAGE_LINKS = {
+  logoLink: 'https://www.brillar.io',
+  menuLinks: {
+    home: 'https://www.brillar.io/',
+    about: 'https://www.brillar.io/#about',
+    solutions: 'https://www.brillar.io/#solutions',
+    partners: 'https://www.brillar.io/#partners',
+    contact: 'https://www.brillar.io/#contact',
+    careers: '/careers'
+  }
+};
 const DEFAULT_ORGANIZATION_LOGO_URL = '/logo.png';
 
 const careerCustomHeaderEl = document.getElementById('careerCustomHeader');
@@ -39,6 +60,36 @@ async function loadOrganizationBranding() {
 }
 
 
+
+function resolveCareerPageLinks(settings) {
+  const menuLinks = settings && typeof settings === 'object' && settings.menuLinks && typeof settings.menuLinks === 'object'
+    ? settings.menuLinks
+    : {};
+
+  return {
+    logoLink: typeof settings?.logoLink === 'string' && settings.logoLink.trim()
+      ? settings.logoLink.trim()
+      : DEFAULT_CAREER_PAGE_LINKS.logoLink,
+    menuLinks: {
+      home: typeof menuLinks.home === 'string' && menuLinks.home.trim() ? menuLinks.home.trim() : DEFAULT_CAREER_PAGE_LINKS.menuLinks.home,
+      about: typeof menuLinks.about === 'string' && menuLinks.about.trim() ? menuLinks.about.trim() : DEFAULT_CAREER_PAGE_LINKS.menuLinks.about,
+      solutions: typeof menuLinks.solutions === 'string' && menuLinks.solutions.trim() ? menuLinks.solutions.trim() : DEFAULT_CAREER_PAGE_LINKS.menuLinks.solutions,
+      partners: typeof menuLinks.partners === 'string' && menuLinks.partners.trim() ? menuLinks.partners.trim() : DEFAULT_CAREER_PAGE_LINKS.menuLinks.partners,
+      contact: typeof menuLinks.contact === 'string' && menuLinks.contact.trim() ? menuLinks.contact.trim() : DEFAULT_CAREER_PAGE_LINKS.menuLinks.contact,
+      careers: typeof menuLinks.careers === 'string' && menuLinks.careers.trim() ? menuLinks.careers.trim() : DEFAULT_CAREER_PAGE_LINKS.menuLinks.careers
+    }
+  };
+}
+
+function applyCareerPageLinks(settings) {
+  const links = resolveCareerPageLinks(settings);
+  if (careersBrandLogoLinkEl) careersBrandLogoLinkEl.href = links.logoLink;
+  Object.entries(careerNavLinkElements).forEach(([key, element]) => {
+    if (!element) return;
+    element.href = links.menuLinks[key];
+  });
+}
+
 function applyCustomCareerSection(element, html) {
   if (!element || typeof html !== 'string') return;
   const trimmed = html.trim();
@@ -49,6 +100,7 @@ function applyCustomCareerSection(element, html) {
 async function loadCareerPageBuilderSettings() {
   try {
     const settings = await fetchJson('/public/settings/career-page');
+    applyCareerPageLinks(settings);
     const headerBackgroundColor = normalizeHeaderBannerColor(settings?.headerBackgroundColor) || '#1e3a8a';
     if (careerCustomHeaderEl) {
       // The static template uses Tailwind gradient classes. Clear any gradient image
@@ -61,6 +113,7 @@ async function loadCareerPageBuilderSettings() {
     applyCustomCareerSection(careerCustomContentEl, settings?.content);
     applyCustomCareerSection(careerCustomFooterEl, settings?.footer);
   } catch (_error) {
+    applyCareerPageLinks(null);
     // Keep default careers layout when custom builder settings are unavailable.
   }
 }

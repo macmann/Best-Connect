@@ -4063,7 +4063,32 @@ init().then(async () => {
     return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized.toLowerCase() : '';
   }
 
+  function normalizeCareerPageLink(value) {
+    if (typeof value !== 'string') return '';
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    if (trimmed.startsWith('/') || trimmed.startsWith('#')) return trimmed;
+    try {
+      // eslint-disable-next-line no-new
+      new URL(trimmed);
+    } catch (error) {
+      return '';
+    }
+    return trimmed;
+  }
+
+  const DEFAULT_CAREER_PAGE_MENU_LINKS = {
+    home: 'https://www.brillar.io/',
+    about: 'https://www.brillar.io/#about',
+    solutions: 'https://www.brillar.io/#solutions',
+    partners: 'https://www.brillar.io/#partners',
+    contact: 'https://www.brillar.io/#contact',
+    careers: '/careers'
+  };
+
   const DEFAULT_CAREER_PAGE_TEMPLATE = {
+    logoLink: 'https://www.brillar.io',
+    menuLinks: DEFAULT_CAREER_PAGE_MENU_LINKS,
     headerBackgroundColor: '#1e3a8a',
     header: `<div class="max-w-5xl mx-auto px-6 py-16">
   <p class="text-sm uppercase tracking-widest text-blue-100">Brillar Careers</p>
@@ -4090,6 +4115,15 @@ init().then(async () => {
   function getCareerPageSettingsPayload(stored) {
     const source = stored && typeof stored === 'object' ? stored : {};
     return {
+      logoLink: normalizeCareerPageLink(source.logoLink) || DEFAULT_CAREER_PAGE_TEMPLATE.logoLink,
+      menuLinks: {
+        home: normalizeCareerPageLink(source?.menuLinks?.home) || DEFAULT_CAREER_PAGE_MENU_LINKS.home,
+        about: normalizeCareerPageLink(source?.menuLinks?.about) || DEFAULT_CAREER_PAGE_MENU_LINKS.about,
+        solutions: normalizeCareerPageLink(source?.menuLinks?.solutions) || DEFAULT_CAREER_PAGE_MENU_LINKS.solutions,
+        partners: normalizeCareerPageLink(source?.menuLinks?.partners) || DEFAULT_CAREER_PAGE_MENU_LINKS.partners,
+        contact: normalizeCareerPageLink(source?.menuLinks?.contact) || DEFAULT_CAREER_PAGE_MENU_LINKS.contact,
+        careers: normalizeCareerPageLink(source?.menuLinks?.careers) || DEFAULT_CAREER_PAGE_MENU_LINKS.careers
+      },
       headerBackgroundColor: normalizeCareerPageColor(source.headerBackgroundColor) || DEFAULT_CAREER_PAGE_TEMPLATE.headerBackgroundColor,
       header: normalizeCareerPageHtml(source.header) || DEFAULT_CAREER_PAGE_TEMPLATE.header,
       updates: normalizeCareerPageHtml(source.updates) || DEFAULT_CAREER_PAGE_TEMPLATE.updates,
@@ -4200,6 +4234,15 @@ init().then(async () => {
   app.put('/settings/career-page', authRequired, managerOnly, async (req, res) => {
     try {
       const payload = {
+        logoLink: normalizeCareerPageLink(req.body?.logoLink) || DEFAULT_CAREER_PAGE_TEMPLATE.logoLink,
+        menuLinks: {
+          home: normalizeCareerPageLink(req.body?.menuLinks?.home) || DEFAULT_CAREER_PAGE_MENU_LINKS.home,
+          about: normalizeCareerPageLink(req.body?.menuLinks?.about) || DEFAULT_CAREER_PAGE_MENU_LINKS.about,
+          solutions: normalizeCareerPageLink(req.body?.menuLinks?.solutions) || DEFAULT_CAREER_PAGE_MENU_LINKS.solutions,
+          partners: normalizeCareerPageLink(req.body?.menuLinks?.partners) || DEFAULT_CAREER_PAGE_MENU_LINKS.partners,
+          contact: normalizeCareerPageLink(req.body?.menuLinks?.contact) || DEFAULT_CAREER_PAGE_MENU_LINKS.contact,
+          careers: normalizeCareerPageLink(req.body?.menuLinks?.careers) || DEFAULT_CAREER_PAGE_MENU_LINKS.careers
+        },
         headerBackgroundColor: normalizeCareerPageColor(req.body?.headerBackgroundColor) || DEFAULT_CAREER_PAGE_TEMPLATE.headerBackgroundColor,
         header: normalizeCareerPageHtml(req.body?.header),
         updates: normalizeCareerPageHtml(req.body?.updates),

@@ -5044,11 +5044,25 @@ function setCareerPageSettingsStatus(message, type = 'info') {
 }
 
 function renderCareerPageSettingsForm() {
+  const logoLinkInput = document.getElementById('careerPageLogoLink');
+  const homeLinkInput = document.getElementById('careerPageMenuHomeLink');
+  const aboutLinkInput = document.getElementById('careerPageMenuAboutLink');
+  const solutionsLinkInput = document.getElementById('careerPageMenuSolutionsLink');
+  const partnersLinkInput = document.getElementById('careerPageMenuPartnersLink');
+  const contactLinkInput = document.getElementById('careerPageMenuContactLink');
+  const careersLinkInput = document.getElementById('careerPageMenuCareersLink');
   const headerBgColorInput = document.getElementById('careerPageHeaderBackgroundColor');
   const headerInput = document.getElementById('careerPageHeaderHtml');
   const updatesInput = document.getElementById('careerPageUpdatesHtml');
   const contentInput = document.getElementById('careerPageContentHtml');
   const footerInput = document.getElementById('careerPageFooterHtml');
+  if (logoLinkInput) logoLinkInput.value = careerPageSettings?.logoLink || 'https://www.brillar.io';
+  if (homeLinkInput) homeLinkInput.value = careerPageSettings?.menuLinks?.home || 'https://www.brillar.io/';
+  if (aboutLinkInput) aboutLinkInput.value = careerPageSettings?.menuLinks?.about || 'https://www.brillar.io/#about';
+  if (solutionsLinkInput) solutionsLinkInput.value = careerPageSettings?.menuLinks?.solutions || 'https://www.brillar.io/#solutions';
+  if (partnersLinkInput) partnersLinkInput.value = careerPageSettings?.menuLinks?.partners || 'https://www.brillar.io/#partners';
+  if (contactLinkInput) contactLinkInput.value = careerPageSettings?.menuLinks?.contact || 'https://www.brillar.io/#contact';
+  if (careersLinkInput) careersLinkInput.value = careerPageSettings?.menuLinks?.careers || '/careers';
   if (headerBgColorInput) headerBgColorInput.value = careerPageSettings?.headerBackgroundColor || '#1e3a8a';
   if (headerInput) headerInput.value = careerPageSettings?.header || '';
   if (updatesInput) updatesInput.value = careerPageSettings?.updates || '';
@@ -5111,6 +5125,15 @@ async function loadCareerPageSettings({ force = false, silent = false } = {}) {
 async function onCareerPageSettingsSubmit(ev) {
   ev.preventDefault();
   const payload = {
+    logoLink: document.getElementById('careerPageLogoLink')?.value || 'https://www.brillar.io',
+    menuLinks: {
+      home: document.getElementById('careerPageMenuHomeLink')?.value || 'https://www.brillar.io/',
+      about: document.getElementById('careerPageMenuAboutLink')?.value || 'https://www.brillar.io/#about',
+      solutions: document.getElementById('careerPageMenuSolutionsLink')?.value || 'https://www.brillar.io/#solutions',
+      partners: document.getElementById('careerPageMenuPartnersLink')?.value || 'https://www.brillar.io/#partners',
+      contact: document.getElementById('careerPageMenuContactLink')?.value || 'https://www.brillar.io/#contact',
+      careers: document.getElementById('careerPageMenuCareersLink')?.value || '/careers'
+    },
     headerBackgroundColor: document.getElementById('careerPageHeaderBackgroundColor')?.value || '#1e3a8a',
     header: document.getElementById('careerPageHeaderHtml')?.value || '',
     updates: document.getElementById('careerPageUpdatesHtml')?.value || '',
@@ -9791,7 +9814,7 @@ async function init() {
   if (postLoginForm) postLoginForm.addEventListener('submit', onPostLoginSettingsSubmit);
   const careerPageForm = document.getElementById('careerPageSettingsForm');
   if (careerPageForm) careerPageForm.addEventListener('submit', onCareerPageSettingsSubmit);
-  ['careerPageHeaderBackgroundColor', 'careerPageHeaderHtml', 'careerPageUpdatesHtml', 'careerPageContentHtml', 'careerPageFooterHtml'].forEach(id => {
+  ['careerPageLogoLink', 'careerPageMenuHomeLink', 'careerPageMenuAboutLink', 'careerPageMenuSolutionsLink', 'careerPageMenuPartnersLink', 'careerPageMenuContactLink', 'careerPageMenuCareersLink', 'careerPageHeaderBackgroundColor', 'careerPageHeaderHtml', 'careerPageUpdatesHtml', 'careerPageContentHtml', 'careerPageFooterHtml'].forEach(id => {
     const input = document.getElementById(id);
     if (input) input.addEventListener('input', updateCareerPagePreview);
   });
