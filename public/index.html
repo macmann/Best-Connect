@@ -6965,6 +6965,7 @@
           <button type="button" class="settings-subtab-button" data-settings-tab="postLogin" role="tab" aria-selected="false">Post-login Sync</button>
           <button type="button" class="settings-subtab-button" data-settings-tab="email" role="tab" aria-selected="false">Email Notifications</button>
           <button type="button" class="settings-subtab-button" data-settings-tab="careerPage" role="tab" aria-selected="false">Career Page</button>
+          <button type="button" class="settings-subtab-button" data-settings-tab="requestCategories" role="tab" aria-selected="false">Request Categories</button>
           <button type="button" class="settings-subtab-button" data-settings-tab="apiTools" role="tab" aria-selected="false">API Testing Tools</button>
         </div>
 
@@ -7445,6 +7446,65 @@
             </button>
           </form>
           <div id="emailSettingsStatus" class="settings-status text-muted"></div>
+        </div>
+        </div>
+
+        <div class="settings-subtab-panel" data-settings-tab-panel="requestCategories">
+        <div class="md-card">
+          <div class="card-title">
+            <span class="material-symbols-rounded">category</span>
+            Request Categories
+          </div>
+          <p class="card-subtitle">Manage employee request categories and SLAs used across the request workflow.</p>
+
+          <form id="requestCategoryForm" class="settings-form">
+            <input type="hidden" id="requestCategoryEditId">
+            <div class="settings-form__fields">
+              <label class="md-label" for="requestCategoryName">Category name</label>
+              <div class="md-input-wrapper">
+                <span class="material-symbols-rounded">label</span>
+                <input type="text" id="requestCategoryName" class="md-input" maxlength="80" placeholder="e.g., Payroll" required>
+              </div>
+            </div>
+            <div class="settings-form__fields">
+              <label class="md-label" for="requestCategorySlaTarget">SLA target (hours)</label>
+              <div class="md-input-wrapper">
+                <span class="material-symbols-rounded">schedule</span>
+                <input type="number" id="requestCategorySlaTarget" class="md-input" min="0" step="0.5" placeholder="Optional">
+              </div>
+            </div>
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label" for="requestCategoryDescription">Description</label>
+              <div class="md-input-wrapper md-input-wrapper--textarea">
+                <span class="material-symbols-rounded">description</span>
+                <textarea id="requestCategoryDescription" class="md-input md-input--textarea" rows="3" maxlength="240" placeholder="Optional guidance for employees."></textarea>
+              </div>
+            </div>
+            <div class="settings-form__fields settings-form__fields--full">
+              <label class="md-label settings-toggle" for="requestCategoryActive">
+                <input type="checkbox" id="requestCategoryActive" checked>
+                Active category
+              </label>
+            </div>
+            <div class="settings-actions">
+              <button type="submit" class="md-button md-button--filled md-button--small settings-form__submit" id="requestCategorySubmitBtn">
+                <span class="material-symbols-rounded">add</span>
+                Add category
+              </button>
+              <button type="button" class="md-button md-button--outlined md-button--small hidden" id="requestCategoryCancelBtn">
+                <span class="material-symbols-rounded">close</span>
+                Cancel edit
+              </button>
+            </div>
+          </form>
+
+          <div id="requestCategoriesList" class="settings-list text-muted">No categories configured.</div>
+
+          <button type="button" class="md-button md-button--filled md-button--small settings-form__submit" id="requestCategoriesSaveBtn">
+            <span class="material-symbols-rounded">save</span>
+            Save request categories
+          </button>
+          <div id="requestCategoriesStatus" class="settings-status text-muted"></div>
         </div>
         </div>
 
