@@ -4787,6 +4787,83 @@
       color: #ffffff;
     }
 
+
+    /* Login card visual refinements scoped in-page */
+    .login-card {
+      position: relative;
+      background: linear-gradient(165deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.9));
+      border: 1px solid rgba(148, 163, 184, 0.22);
+    }
+
+    .login-card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: linear-gradient(145deg, rgba(58, 111, 248, 0.08), transparent 35%, rgba(103, 80, 164, 0.08));
+      pointer-events: none;
+    }
+
+    .login-card-header {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      gap: 12px;
+      text-align: center;
+    }
+
+    .brand-logo {
+      width: 118px;
+    }
+
+    .login-kicker {
+      margin: 0;
+      text-transform: uppercase;
+      letter-spacing: 0.13em;
+      font-size: 0.72rem;
+      font-weight: 800;
+      color: #334155;
+    }
+
+    .login-title {
+      font-weight: 750;
+    }
+
+    .login-security-strip {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .login-security-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(58, 111, 248, 0.09);
+      color: #1e40af;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .login-security-item .material-symbols-rounded {
+      font-size: 1rem;
+    }
+
+    .form-stack {
+      position: relative;
+      z-index: 1;
+    }
+
+    .login-help-text {
+      margin: -4px 0 0;
+      text-align: center;
+      font-size: 0.82rem;
+      color: #475569;
+    }
+
   </style>
 </head>
 <body class="app-shell">
@@ -4821,10 +4898,17 @@
       </section>
 
       <div class="login-card">
-        <img id="loginBrandLogo" src="logo.png" alt="Organization logo" class="brand-logo">
-        <div>
-          <h1 id="loginPortalName" class="login-title">Brillar HR Portal</h1>
-          <p class="login-subtitle">Sign in to manage leave, approvals, performance cycles, and talent workflows with confidence.</p>
+        <div class="login-card-header">
+          <img id="loginBrandLogo" src="logo.png" alt="Organization logo" class="brand-logo">
+          <p class="login-kicker">Secure workforce access</p>
+          <div>
+            <h1 id="loginPortalName" class="login-title">Brillar HR Portal</h1>
+            <p class="login-subtitle">Sign in to manage leave, approvals, performance cycles, and talent workflows with confidence.</p>
+          </div>
+          <div class="login-security-strip" aria-hidden="true">
+            <span class="login-security-item"><span class="material-symbols-rounded">verified_user</span>Enterprise security</span>
+            <span class="login-security-item"><span class="material-symbols-rounded">encrypted</span>Encrypted sessions</span>
+          </div>
         </div>
         <form id="loginForm" class="form-stack">
           <div class="md-field">
@@ -4849,6 +4933,7 @@
             <span class="material-symbols-rounded">account_circle</span>
             Sign in with Microsoft 365
           </button>
+          <p class="login-help-text">Need help signing in? Contact your HR administrator or IT helpdesk.</p>
           <div id="loginError" class="form-error hidden"></div>
         </form>
       </div>
