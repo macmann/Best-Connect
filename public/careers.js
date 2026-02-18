@@ -50,7 +50,12 @@ async function loadCareerPageBuilderSettings() {
   try {
     const settings = await fetchJson('/public/settings/career-page');
     const headerBackgroundColor = normalizeHeaderBannerColor(settings?.headerBackgroundColor) || '#1e3a8a';
-    if (careerCustomHeaderEl) careerCustomHeaderEl.style.backgroundColor = headerBackgroundColor;
+    if (careerCustomHeaderEl) {
+      // The static template uses Tailwind gradient classes. Clear any gradient image
+      // so the saved builder color can render on the public careers page.
+      careerCustomHeaderEl.style.backgroundImage = 'none';
+      careerCustomHeaderEl.style.backgroundColor = headerBackgroundColor;
+    }
     applyCustomCareerSection(careerCustomHeaderEl, settings?.header);
     applyCustomCareerSection(careerCustomUpdatesEl, settings?.updates);
     applyCustomCareerSection(careerCustomContentEl, settings?.content);
