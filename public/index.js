@@ -983,6 +983,8 @@ let requestPortalActiveTab = 'new';
 let requestPortalCurrentUser = null;
 let requestPortalRequesterEmployee = null;
 let requestPortalMyRequests = [];
+let requestPortalAllRequests = [];
+let requestPortalAllRequestsLoaded = false;
 let settingsActiveSubtab = 'organization';
 let aiModelOptions = [
   { value: 'gpt-5', label: 'GPT5' },
@@ -1506,6 +1508,9 @@ function updateRequestPortalVisibility() {
   managerOnlyElements.forEach(element => {
     element.classList.toggle('hidden', !managerVisible);
   });
+  if (!managerVisible && requestPortalActiveTab === 'all') {
+    updateRequestPortalSubtab('mine');
+  }
 }
 
 function formatRequestPortalDate(value) {
@@ -1545,8 +1550,21 @@ function setRequestPortalMyRequestsStatus(message, type = 'info') {
   if (type === 'success') statusEl.classList.add('settings-status--success');
 }
 
+function setRequestPortalAllRequestsStatus(message, type = 'info') {
+  const statusEl = document.getElementById('requestPortalAllRequestsStatus');
+  if (!statusEl) return;
+  statusEl.textContent = message || '';
+  statusEl.classList.remove('settings-status--error', 'settings-status--success');
+  if (type === 'error') statusEl.classList.add('settings-status--error');
+  if (type === 'success') statusEl.classList.add('settings-status--success');
+}
+
 function updateRequestPortalSubtab(name = 'new') {
-  requestPortalActiveTab = name === 'mine' ? 'mine' : 'new';
+  const allowedTabs = ['new', 'mine', 'all'];
+  requestPortalActiveTab = allowedTabs.includes(name) ? name : 'new';
+  if (requestPortalActiveTab === 'all' && !isManagerRole(currentUser)) {
+    requestPortalActiveTab = 'mine';
+  }
   const buttons = document.querySelectorAll('[data-request-portal-tab]');
   buttons.forEach(button => {
     const isActive = button.dataset.requestPortalTab === requestPortalActiveTab;
@@ -1560,6 +1578,25 @@ function updateRequestPortalSubtab(name = 'new') {
     panel.classList.toggle('hidden', !isActive);
     panel.classList.toggle('request-portal-subtab-panel--active', isActive);
   });
+}
+
+function getRequestPortalAllFilters() {
+  return {
+    status: document.getElementById('requestPortalFilterStatus')?.value?.trim() || '',
+    categoryId: document.getElementById('requestPortalFilterCategory')?.value?.trim() || '',
+    requesterEmployeeId: document.getElementById('requestPortalFilterRequester')?.value?.trim() || '',
+    fromDate: document.getElementById('requestPortalFilterFromDate')?.value?.trim() || '',
+    toDate: document.getElementById('requestPortalFilterToDate')?.value?.trim() || ''
+  };
+}
+
+function serializeRequestPortalAllFilters() {
+  const params = new URLSearchParams();
+  const filters = getRequestPortalAllFilters();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  return params.toString();
 }
 
 function renderRequestPortalCategories(categories = []) {
@@ -1639,6 +1676,64 @@ function renderRequestPortalMyRequests() {
   }).join('');
 }
 
+function getAllowedStatusActions(status = '') {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (normalized === 'open') return [{ value: 'in_progress', label: 'Set In Progress' }];
+  if (normalized === 'in_progress') return [{ value: 'closed', label: 'Set Closed' }];
+  if (normalized === 'closed') return [{ value: 'in_progress', label: 'Reopen' }];
+  return [];
+}
+
+function renderRequestPortalAllRequests() {
+  const tbody = document.getElementById('requestPortalAllRequestsBody');
+  if (!tbody) return;
+
+  if (!requestPortalAllRequests.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-muted">No requests match the current filters.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = requestPortalAllRequests.map(requestItem => {
+    const nextStatusOptions = getAllowedStatusActions(requestItem.status);
+    const actionOptions = nextStatusOptions.length
+      ? nextStatusOptions.map(option => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`).join('')
+      : '<option value="">No status action</option>';
+    const defaultAttachmentName = requestItem.categoryName
+      ? `${requestItem.categoryName}-result.pdf`
+      : 'result-file.pdf';
+
+    return `
+      <tr>
+        <td>
+          <div><strong>${escapeHtml(requestItem.subject || requestItem.id || '-')}</strong></div>
+          <div class="text-muted">${escapeHtml(requestItem.id || '-')}</div>
+        </td>
+        <td>
+          <div>${escapeHtml(requestItem.requesterEmployeeId || '-')}</div>
+          <div class="text-muted">${escapeHtml(requestItem.categoryName || requestItem.categoryId || 'General')}</div>
+        </td>
+        <td><span class="md-chip">${escapeHtml(formatRequestPortalStatus(requestItem.status))}</span></td>
+        <td>${escapeHtml(formatRequestPortalDate(requestItem.requestedAt))}</td>
+        <td>
+          <div class="form-row" style="margin:0; gap:8px;">
+            <select class="md-select" data-request-manager-status="${escapeHtml(requestItem.id || '')}">
+              <option value="">Change status</option>
+              ${actionOptions}
+            </select>
+            <input type="text" class="md-input" data-request-manager-note="${escapeHtml(requestItem.id || '')}" placeholder="Manager response note">
+            <input type="text" class="md-input" data-request-manager-attachment-url="${escapeHtml(requestItem.id || '')}" placeholder="Attachment URL (optional)">
+            <input type="text" class="md-input" data-request-manager-attachment-name="${escapeHtml(requestItem.id || '')}" value="${escapeHtml(defaultAttachmentName)}" placeholder="Attachment name">
+            <button type="button" class="md-button md-button--filled md-button--small" data-request-manager-save="${escapeHtml(requestItem.id || '')}">
+              <span class="material-symbols-rounded">save</span>
+              Save
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
 function getRequestPortalRequesterEmployeeId() {
   if (requestPortalRequesterEmployee?.id !== undefined && requestPortalRequesterEmployee?.id !== null) {
     return String(requestPortalRequesterEmployee.id);
@@ -1671,6 +1766,84 @@ async function loadRequestPortalMyRequests() {
   }
 }
 
+async function loadRequestPortalAllRequests({ silent = false } = {}) {
+  if (!isManagerRole(currentUser)) return;
+  if (!silent) setRequestPortalAllRequestsStatus('Loading requests...');
+  try {
+    const query = serializeRequestPortalAllFilters();
+    const res = await apiFetch(`/api/requests${query ? `?${query}` : ''}`);
+    const data = await res.json().catch(() => []);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Unable to load requests.');
+    }
+    requestPortalAllRequests = Array.isArray(data) ? data : [];
+    requestPortalAllRequestsLoaded = true;
+    renderRequestPortalAllRequests();
+    setRequestPortalAllRequestsStatus(requestPortalAllRequests.length ? 'Requests loaded.' : 'No requests match the current filters.');
+  } catch (err) {
+    console.error('Failed to load all requests', err);
+    requestPortalAllRequests = [];
+    renderRequestPortalAllRequests();
+    setRequestPortalAllRequestsStatus(err.message || 'Unable to load requests.', 'error');
+  }
+}
+
+async function onRequestPortalManagerSave(requestId) {
+  if (!requestId) return;
+  const statusSelect = document.querySelector(`[data-request-manager-status="${CSS.escape(requestId)}"]`);
+  const noteInput = document.querySelector(`[data-request-manager-note="${CSS.escape(requestId)}"]`);
+  const attachmentUrlInput = document.querySelector(`[data-request-manager-attachment-url="${CSS.escape(requestId)}"]`);
+  const attachmentNameInput = document.querySelector(`[data-request-manager-attachment-name="${CSS.escape(requestId)}"]`);
+
+  const nextStatus = statusSelect?.value?.trim() || '';
+  const message = noteInput?.value?.trim() || '';
+  const attachmentUrl = attachmentUrlInput?.value?.trim() || '';
+  const attachmentName = attachmentNameInput?.value?.trim() || '';
+
+  if (!nextStatus && !message && !attachmentUrl) {
+    setRequestPortalAllRequestsStatus('Select a status, add a response note, or provide attachment metadata before saving.', 'error');
+    return;
+  }
+
+  try {
+    if (nextStatus) {
+      const statusRes = await apiFetch(`/api/requests/${encodeURIComponent(requestId)}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus })
+      });
+      const statusData = await statusRes.json().catch(() => ({}));
+      if (!statusRes.ok) throw new Error(statusData?.error || 'Unable to update status.');
+    }
+
+    if (message || attachmentUrl) {
+      const attachments = attachmentUrl
+        ? [{ url: attachmentUrl, name: attachmentName || 'Attachment' }]
+        : [];
+      const resultRes = await apiFetch(`/api/requests/${encodeURIComponent(requestId)}/result`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          attachmentMetadata: attachments,
+          metadata: attachments.length ? { attachments } : undefined
+        })
+      });
+      const resultData = await resultRes.json().catch(() => ({}));
+      if (!resultRes.ok) throw new Error(resultData?.error || 'Unable to save result details.');
+    }
+
+    setRequestPortalAllRequestsStatus('Request updated successfully.', 'success');
+    await Promise.all([
+      loadRequestPortalAllRequests({ silent: true }),
+      loadRequestPortalMyRequests()
+    ]);
+  } catch (err) {
+    console.error('Failed to save manager request action', err);
+    setRequestPortalAllRequestsStatus(err.message || 'Unable to save manager action.', 'error');
+  }
+}
+
 async function initializeRequestPortal({ force = false } = {}) {
   if (requestPortalLoading && !force) return requestPortalLoading;
   if (requestPortalInitialized && !force) {
@@ -1699,6 +1872,9 @@ async function initializeRequestPortal({ force = false } = {}) {
     renderRequestPortalRequester();
     renderRequestPortalCategories(categories);
     await loadRequestPortalMyRequests();
+    if (isManagerRole(currentUser)) {
+      await loadRequestPortalAllRequests({ silent: true });
+    }
     requestPortalInitialized = true;
     setRequestPortalFormStatus('Ready to submit your request.');
   })();
@@ -10404,12 +10580,48 @@ async function init() {
         updateRequestPortalSubtab(nextTab);
         if (nextTab === 'mine') {
           loadRequestPortalMyRequests();
+        } else if (nextTab === 'all' && isManagerRole(currentUser)) {
+          if (!requestPortalAllRequestsLoaded) {
+            loadRequestPortalAllRequests();
+          }
         }
       });
     });
   }
   const requestPortalForm = document.getElementById('requestPortalForm');
   if (requestPortalForm) requestPortalForm.addEventListener('submit', onRequestPortalSubmit);
+  const requestPortalFilterApplyBtn = document.getElementById('requestPortalFilterApplyBtn');
+  if (requestPortalFilterApplyBtn) {
+    requestPortalFilterApplyBtn.addEventListener('click', () => {
+      loadRequestPortalAllRequests();
+    });
+  }
+  const requestPortalFilterResetBtn = document.getElementById('requestPortalFilterResetBtn');
+  if (requestPortalFilterResetBtn) {
+    requestPortalFilterResetBtn.addEventListener('click', () => {
+      const ids = [
+        'requestPortalFilterStatus',
+        'requestPortalFilterCategory',
+        'requestPortalFilterRequester',
+        'requestPortalFilterFromDate',
+        'requestPortalFilterToDate'
+      ];
+      ids.forEach(id => {
+        const input = document.getElementById(id);
+        if (input) input.value = '';
+      });
+      loadRequestPortalAllRequests();
+    });
+  }
+  const requestPortalAllRequestsBody = document.getElementById('requestPortalAllRequestsBody');
+  if (requestPortalAllRequestsBody) {
+    requestPortalAllRequestsBody.addEventListener('click', event => {
+      const button = event.target.closest('[data-request-manager-save]');
+      if (!button) return;
+      const requestId = button.dataset.requestManagerSave || '';
+      onRequestPortalManagerSave(requestId);
+    });
+  }
   const learningHubTab = document.getElementById('tabLearningHub');
   if (learningHubTab) learningHubTab.onclick = () => showPanel('learningHub');
   const learningReportsTab = document.getElementById('tabLearningReports');

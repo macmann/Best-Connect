@@ -140,7 +140,7 @@ const REQUEST_STATUS_SET = new Set(REQUEST_STATUS_VALUES);
 const REQUEST_STATUS_TRANSITIONS = {
   open: 'in_progress',
   in_progress: 'closed',
-  closed: null
+  closed: 'in_progress'
 };
 const INACTIVE_EMPLOYEE_STATUSES = new Set([
   'inactive',
@@ -1077,6 +1077,47 @@ function computeResolutionDurationHours(requestRecord) {
   return Number((durationMs / (1000 * 60 * 60)).toFixed(2));
 }
 
+function toDateFilterBoundary(value, endOfDay = false) {
+  const normalized = toNonEmptyString(value);
+  if (!normalized) return null;
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return null;
+  if (endOfDay) {
+    date.setHours(23, 59, 59, 999);
+  } else {
+    date.setHours(0, 0, 0, 0);
+  }
+  return date;
+}
+
+function normalizeRequestAttachments(input) {
+  const source = Array.isArray(input)
+    ? input
+    : Array.isArray(input?.attachments)
+      ? input.attachments
+      : [];
+
+  return source
+    .map(item => {
+      if (!item || typeof item !== 'object') return null;
+      const url = toNonEmptyString(item.url);
+      if (!url) return null;
+      return {
+        url,
+        name: toNonEmptyString(item.name) || 'Attachment',
+        contentType: toNonEmptyString(item.contentType) || null,
+        sizeBytes: Number.isFinite(Number(item.sizeBytes)) ? Number(item.sizeBytes) : null
+      };
+    })
+    .filter(Boolean);
+}
+
+function appendRequestAuditEntry(requestRecord, entry = {}) {
+  if (!requestRecord || typeof requestRecord !== 'object') return;
+  requestRecord.audit = Array.isArray(requestRecord.audit) ? requestRecord.audit : [];
+  requestRecord.audit.push(entry);
+}
+
 function toRequestResponse(requestRecord) {
   const normalizedStatus = normalizeRequestStatus(requestRecord?.status) || 'open';
   const resolutionDurationHours = Number.isFinite(requestRecord?.resolutionDurationHours)
@@ -1096,6 +1137,7 @@ function toRequestResponse(requestRecord) {
     updatedAt: requestRecord.updatedAt || null,
     closedAt: requestRecord.closedAt || null,
     result: requestRecord.result || null,
+    audit: Array.isArray(requestRecord.audit) ? requestRecord.audit : [],
     resolutionDurationHours: resolutionDurationHours ?? null
   };
 }
@@ -6443,6 +6485,14 @@ init().then(async () => {
     const requesterFilter = normalizeEmployeeId(req.query?.requesterEmployeeId);
     const categoryFilter = toNonEmptyString(req.query?.categoryId).toLowerCase();
     const queryFilter = toNonEmptyString(req.query?.q).toLowerCase();
+    const fromDate = toDateFilterBoundary(req.query?.fromDate, false);
+    const toDate = toDateFilterBoundary(req.query?.toDate, true);
+    if (req.query?.fromDate && !fromDate) {
+      return res.status(400).json({ error: 'fromDate must be a valid date value.' });
+    }
+    if (req.query?.toDate && !toDate) {
+      return res.status(400).json({ error: 'toDate must be a valid date value.' });
+    }
     const scope = toNonEmptyString(req.query?.scope).toLowerCase() === 'team' ? 'team' : 'org';
 
     const visibleRequests = db.data.requests.filter(requestRecord => {
@@ -6474,6 +6524,14 @@ init().then(async () => {
           .join(' ');
         return haystack.includes(queryFilter);
       })
+      .filter(requestRecord => {
+        if (!fromDate && !toDate) return true;
+        const requestedAt = new Date(requestRecord?.requestedAt);
+        if (Number.isNaN(requestedAt.getTime())) return false;
+        if (fromDate && requestedAt < fromDate) return false;
+        if (toDate && requestedAt > toDate) return false;
+        return true;
+      })
       .sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime())
       .map(toRequestResponse);
 
@@ -6492,11 +6550,16 @@ init().then(async () => {
     }
 
     await db.read();
+    db.data.employees = Array.isArray(db.data.employees) ? db.data.employees : [];
+    db.data.users = Array.isArray(db.data.users) ? db.data.users : [];
     ensureRequestsCollection(db.data);
 
     const requestRecord = db.data.requests.find(item => String(item?.id) === requestId);
     if (!requestRecord) {
       return res.status(404).json({ error: 'Request not found.' });
+    }
+    if (!managerCanAccessRequest(requestRecord, req.user, db.data.employees, db.data.users)) {
+      return res.status(403).json({ error: 'Forbidden' });
     }
 
     const currentStatus = normalizeRequestStatus(requestRecord.status) || 'open';
@@ -6508,6 +6571,7 @@ init().then(async () => {
     }
 
     const nowIso = new Date().toISOString();
+    const previousStatus = currentStatus;
     requestRecord.status = nextStatus;
     requestRecord.updatedAt = nowIso;
 
@@ -6521,6 +6585,14 @@ init().then(async () => {
       requestRecord.resolutionDurationHours = null;
     }
 
+    appendRequestAuditEntry(requestRecord, {
+      type: previousStatus === 'closed' && nextStatus === 'in_progress' ? 'reopened' : 'status_changed',
+      fromStatus: previousStatus,
+      toStatus: nextStatus,
+      at: nowIso,
+      actorEmployeeId: normalizeEmployeeId(req.user?.employeeId) || null
+    });
+
     await db.write();
     return res.json(toRequestResponse(requestRecord));
   });
@@ -6532,17 +6604,28 @@ init().then(async () => {
     }
 
     await db.read();
+    db.data.employees = Array.isArray(db.data.employees) ? db.data.employees : [];
+    db.data.users = Array.isArray(db.data.users) ? db.data.users : [];
     ensureRequestsCollection(db.data);
 
     const requestRecord = db.data.requests.find(item => String(item?.id) === requestId);
     if (!requestRecord) {
       return res.status(404).json({ error: 'Request not found.' });
     }
+    if (!managerCanAccessRequest(requestRecord, req.user, db.data.employees, db.data.users)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
 
     const nowIso = new Date().toISOString();
     const message = toNonEmptyString(req.body?.message);
+    const attachmentMetadata = normalizeRequestAttachments(req.body?.attachmentMetadata || req.body?.attachments);
     const metadata = req.body?.metadata && typeof req.body.metadata === 'object' && !Array.isArray(req.body.metadata)
-      ? req.body.metadata
+      ? {
+          ...req.body.metadata,
+          ...(attachmentMetadata.length
+            ? { attachments: attachmentMetadata }
+            : {})
+        }
       : undefined;
 
     requestRecord.result = {
@@ -6553,6 +6636,14 @@ init().then(async () => {
       updatedByEmployeeId: normalizeEmployeeId(req.user?.employeeId) || null
     };
     requestRecord.updatedAt = nowIso;
+
+    appendRequestAuditEntry(requestRecord, {
+      type: 'result_updated',
+      at: nowIso,
+      actorEmployeeId: normalizeEmployeeId(req.user?.employeeId) || null,
+      hasMessage: Boolean(message),
+      attachmentCount: attachmentMetadata.length
+    });
 
     await db.write();
     return res.json(toRequestResponse(requestRecord));
