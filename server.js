@@ -4057,13 +4057,36 @@ init().then(async () => {
     return value.trim().slice(0, maxLength);
   }
 
+  const DEFAULT_CAREER_PAGE_TEMPLATE = {
+    header: `<div class="max-w-5xl mx-auto px-6 py-16">
+  <p class="text-sm uppercase tracking-widest text-blue-100">Brillar Careers</p>
+  <h1 class="text-4xl sm:text-5xl font-bold mt-4">Your Digital Transformation Partner</h1>
+  <h2 class="text-2xl sm:text-3xl font-semibold mt-2 text-blue-100">Transforming tomorrow</h2>
+  <p class="mt-4 max-w-3xl text-lg text-blue-100">Join Brillar and help drive digital transformation across Southeast Asia.</p>
+  <div class="mt-8">
+    <a id="view-open-positions" href="#open-positions" class="inline-block px-6 py-3 bg-white text-blue-700 font-semibold rounded-md shadow hover:bg-blue-50">View Open Positions</a>
+  </div>
+</div>`,
+    updates: `<div class="bg-white rounded-2xl shadow-lg p-6 sm:p-8">
+  <h3 class="text-2xl font-semibold text-gray-900">Careers at Brillar</h3>
+  <p class="mt-3 text-gray-600">At Brillar, we are passionate about empowering organizations through technology. Join a team that values innovation, collaboration, and making a meaningful impact for our partners across the region.</p>
+</div>`,
+    content: `<div id="job-detail" class="bg-white rounded-xl shadow p-6 sm:p-8">
+  <h3 class="text-xl font-semibold text-gray-900">Explore our openings</h3>
+  <p class="text-gray-600 mt-2">Select a role to view details and apply.</p>
+</div>`,
+    footer: `<div class="max-w-5xl mx-auto px-6 text-center space-y-1">
+  <p>© Brillar. All rights reserved.</p>
+</div>`
+  };
+
   function getCareerPageSettingsPayload(stored) {
     const source = stored && typeof stored === 'object' ? stored : {};
     return {
-      header: normalizeCareerPageHtml(source.header),
-      updates: normalizeCareerPageHtml(source.updates),
-      content: normalizeCareerPageHtml(source.content),
-      footer: normalizeCareerPageHtml(source.footer)
+      header: normalizeCareerPageHtml(source.header) || DEFAULT_CAREER_PAGE_TEMPLATE.header,
+      updates: normalizeCareerPageHtml(source.updates) || DEFAULT_CAREER_PAGE_TEMPLATE.updates,
+      content: normalizeCareerPageHtml(source.content) || DEFAULT_CAREER_PAGE_TEMPLATE.content,
+      footer: normalizeCareerPageHtml(source.footer) || DEFAULT_CAREER_PAGE_TEMPLATE.footer
     };
   }
 

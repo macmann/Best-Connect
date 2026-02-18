@@ -4999,16 +4999,34 @@ function getCareerPageBuilderTemplate(settings = {}) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.tailwindcss.com"><\/script>
   <style>
-    body { font-family: Inter, Arial, sans-serif; margin: 0; color: #1f2937; background: #f8fafc; }
-    .career-preview-section { max-width: 960px; margin: 16px auto; padding: 16px; background: #ffffff; border-radius: 12px; }
+    body { font-family: Inter, Arial, sans-serif; margin: 0; color: #1f2937; background: #f9fafb; }
   </style>
 </head>
-<body>
-  <section class="career-preview-section">${header || '<p><em>No header HTML</em></p>'}</section>
-  <section class="career-preview-section">${updates || '<p><em>No updates HTML</em></p>'}</section>
-  <section class="career-preview-section">${content || '<p><em>No content HTML</em></p>'}</section>
-  <section class="career-preview-section">${footer || '<p><em>No footer HTML</em></p>'}</section>
+<body class="bg-gray-50 text-gray-900">
+  <main>
+    <section class="bg-gradient-to-r from-blue-900 via-blue-700 to-blue-500 text-white">
+      ${header || '<div class="max-w-5xl mx-auto px-6 py-16"><p><em>No header HTML</em></p></div>'}
+    </section>
+    <section class="max-w-5xl mx-auto px-6 -mt-10">
+      ${updates || '<div class="bg-white rounded-2xl shadow-lg p-6 sm:p-8"><p><em>No updates HTML</em></p></div>'}
+    </section>
+    <section class="bg-gray-50 py-12 mt-12">
+      <div class="max-w-5xl mx-auto px-6">
+        <div class="text-center mb-8">
+          <h3 class="text-3xl font-semibold text-gray-900">Open Positions</h3>
+          <p class="mt-2 text-gray-600">This list is rendered live on <strong>/careers</strong>.</p>
+        </div>
+      </div>
+    </section>
+    <section class="max-w-5xl mx-auto px-6 pb-16">
+      ${content || '<div class="bg-white rounded-xl shadow p-6 sm:p-8"><p><em>No content HTML</em></p></div>'}
+    </section>
+  </main>
+  <footer class="bg-gray-900 text-gray-300 text-sm py-6 mt-10">
+    ${footer || '<div class="max-w-5xl mx-auto px-6 text-center"><p><em>No footer HTML</em></p></div>'}
+  </footer>
 </body>
 </html>`;
 }
