@@ -4276,6 +4276,18 @@ const PERFORMANCE_COMPETENCIES = [
   { key: 'leadership', label: 'Leadership & Growth' }
 ];
 
+const PERFORMANCE_RANKING_LABELS = {
+  top_performer: 'Top performer (9)',
+  future_leader: 'Future leader (8)',
+  high_impact: 'High impact performer (7)',
+  strong_core: 'Strong core contributor (6)',
+  solid_reliable: 'Solid & reliable (5)',
+  inconsistent_growth: 'Inconsistent, needs growth (4)',
+  new_in_role: 'New in role, promising (3)',
+  at_risk: 'At risk performer (2)',
+  under_performer: 'Under performer (1)'
+};
+
 let performanceState = null;
 let performanceEmployeeId = '';
 let performanceInitialized = false;
@@ -4317,6 +4329,7 @@ function normalizePerformanceState(data = {}) {
     yearEnd: data.yearEnd || {
       selfReview: '',
       managerReview: '',
+      rankingCategory: '',
       goalScores: [],
       competencyScores: [],
       overallScore: null
@@ -4485,11 +4498,13 @@ function renderYearEnd() {
   ensureGoalScores();
   const selfInput = document.getElementById('yearEndSelf');
   const managerInput = document.getElementById('yearEndManager');
+  const rankingInput = document.getElementById('yearEndRanking');
   const goalsContainer = document.getElementById('yearEndGoals');
   const compContainer = document.getElementById('yearEndCompetencies');
   const scoreEl = document.getElementById('yearEndScore');
   if (selfInput) selfInput.value = performanceState?.yearEnd?.selfReview || '';
   if (managerInput) managerInput.value = performanceState?.yearEnd?.managerReview || '';
+  if (rankingInput) rankingInput.value = performanceState?.yearEnd?.rankingCategory || '';
 
   if (goalsContainer) {
     goalsContainer.innerHTML = '';
@@ -4597,6 +4612,13 @@ function renderDevelopment() {
   }
 }
 
+function renderPerformanceCycleControls() {
+  const cycleInput = document.getElementById('performanceCycleYear');
+  if (cycleInput) {
+    cycleInput.value = Number(performanceState?.cycleYear || new Date().getFullYear());
+  }
+}
+
 function renderPerformanceExperience() {
   renderGoals();
   renderCheckIns();
@@ -4604,7 +4626,65 @@ function renderPerformanceExperience() {
   renderYearEnd();
   renderCalibration();
   renderDevelopment();
+  renderPerformanceCycleControls();
   updatePerformanceSummary();
+}
+
+async function onCycleKickoff() {
+  if (!performanceEmployeeId || !performanceState) {
+    alert('Select an employee first.');
+    return;
+  }
+  const cycleInput = document.getElementById('performanceCycleYear');
+  const cycleYear = Number(cycleInput?.value || 0);
+  if (!Number.isInteger(cycleYear) || cycleYear < 2020 || cycleYear > 2100) {
+    alert('Enter a valid cycle year.');
+    return;
+  }
+  performanceState = normalizePerformanceState({
+    ...performanceState,
+    cycleYear,
+    goals: [],
+    checkIns: [],
+    midYear: { selfAssessment: '', interimManagerRating: '', evidence: [] },
+    yearEnd: {
+      selfReview: '',
+      managerReview: '',
+      rankingCategory: '',
+      goalScores: [],
+      competencyScores: [],
+      overallScore: null
+    },
+    development: { planSummary: '', trainings: [], followUps: [] },
+    approvals: [],
+    reminders: []
+  });
+  renderPerformanceExperience();
+  await persistPerformance();
+  alert(`Cycle ${cycleYear} kicked off for selected employee.`);
+}
+
+async function onGeneratePerformanceReport() {
+  if (!performanceEmployeeId || !performanceState?.cycleYear) {
+    alert('Select an employee and load a cycle first.');
+    return;
+  }
+  const url = `/api/performance/report?cycleYear=${encodeURIComponent(performanceState.cycleYear)}&employeeId=${encodeURIComponent(performanceEmployeeId)}`;
+  const res = await apiFetch(url);
+  if (!res.ok) {
+    alert('Unable to generate report right now.');
+    return;
+  }
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const ranking = PERFORMANCE_RANKING_LABELS[performanceState?.yearEnd?.rankingCategory] || 'unranked';
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = `performance-cycle-${performanceState.cycleYear}-${String(ranking).replace(/\s+/g, '-').toLowerCase()}.pdf`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(objectUrl);
 }
 
 async function loadPerformanceReview(empId) {
@@ -4756,10 +4836,12 @@ async function onYearEndSubmit(ev) {
   ev.preventDefault();
   const selfReview = document.getElementById('yearEndSelf').value;
   const managerReview = document.getElementById('yearEndManager').value;
+  const rankingCategory = document.getElementById('yearEndRanking').value;
   performanceState.yearEnd = {
     ...performanceState.yearEnd,
     selfReview,
-    managerReview
+    managerReview,
+    rankingCategory
   };
   computeWeightedScore();
   renderYearEnd();
@@ -4856,6 +4938,8 @@ async function ensurePerformanceExperience() {
   const yearEndCompetencies = document.getElementById('yearEndCompetencies');
   const calibrationButton = document.getElementById('calibrationSave');
   const calibrationToggle = document.getElementById('calibrationToggle');
+  const cycleKickoffButton = document.getElementById('performanceCycleKickoff');
+  const reportButton = document.getElementById('performanceGenerateReport');
   const trainingButton = document.getElementById('addTraining');
   const followUpButton = document.getElementById('addFollowUp');
   const devLists = document.getElementById('developmentForm');
@@ -4869,6 +4953,8 @@ async function ensurePerformanceExperience() {
   if (yearEndCompetencies) yearEndCompetencies.addEventListener('input', onYearEndChange);
   if (calibrationButton) calibrationButton.addEventListener('click', onCalibrationSave);
   if (calibrationToggle) calibrationToggle.addEventListener('click', onCalibrationToggle);
+  if (cycleKickoffButton) cycleKickoffButton.addEventListener('click', onCycleKickoff);
+  if (reportButton) reportButton.addEventListener('click', onGeneratePerformanceReport);
   if (devForm) devForm.addEventListener('submit', onDevelopmentSubmit);
   if (trainingButton) trainingButton.addEventListener('click', onTrainingAdd);
   if (followUpButton) followUpButton.addEventListener('click', onFollowUpAdd);
