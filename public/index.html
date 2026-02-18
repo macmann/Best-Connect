@@ -5087,6 +5087,7 @@
         <div class="settings-subtabs" role="tablist" aria-label="Request Portal Views">
           <button type="button" class="settings-subtab-button settings-subtab-button--active" data-request-portal-tab="new" role="tab" aria-selected="true">New Request</button>
           <button type="button" class="settings-subtab-button" data-request-portal-tab="mine" role="tab" aria-selected="false">My Requests</button>
+          <button type="button" class="settings-subtab-button hidden" data-request-portal-tab="all" role="tab" aria-selected="false" data-request-portal-manager-only>All Requests</button>
         </div>
 
         <div class="request-portal-subtab-panel request-portal-subtab-panel--active" data-request-portal-panel="new">
@@ -5156,6 +5157,72 @@
                   </tr>
                 </thead>
                 <tbody id="requestPortalMyRequestsBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="request-portal-subtab-panel hidden" data-request-portal-panel="all" data-request-portal-manager-only>
+          <div class="md-card">
+            <div class="card-title">
+              <span class="material-symbols-rounded">manage_search</span>
+              All Requests
+            </div>
+            <p class="card-subtitle">Managers can filter requests and update fulfillment details.</p>
+            <div class="form-row two-col">
+              <div>
+                <label class="md-label" for="requestPortalFilterStatus">Status</label>
+                <select id="requestPortalFilterStatus" class="md-select">
+                  <option value="">All statuses</option>
+                  <option value="open">Open</option>
+                  <option value="in_progress">In progress</option>
+                  <option value="closed">Closed</option>
+                </select>
+              </div>
+              <div>
+                <label class="md-label" for="requestPortalFilterCategory">Category</label>
+                <input type="text" id="requestPortalFilterCategory" class="md-input" placeholder="Category ID or name">
+              </div>
+            </div>
+            <div class="form-row two-col">
+              <div>
+                <label class="md-label" for="requestPortalFilterRequester">Requester employee ID</label>
+                <input type="text" id="requestPortalFilterRequester" class="md-input" placeholder="e.g. 1024">
+              </div>
+              <div>
+                <label class="md-label" for="requestPortalFilterFromDate">From date</label>
+                <input type="date" id="requestPortalFilterFromDate" class="md-input">
+              </div>
+            </div>
+            <div class="form-row two-col">
+              <div>
+                <label class="md-label" for="requestPortalFilterToDate">To date</label>
+                <input type="date" id="requestPortalFilterToDate" class="md-input">
+              </div>
+              <div style="display:flex; align-items:flex-end; gap:8px;">
+                <button type="button" id="requestPortalFilterApplyBtn" class="md-button md-button--filled md-button--small">
+                  <span class="material-symbols-rounded">filter_alt</span>
+                  Apply Filters
+                </button>
+                <button type="button" id="requestPortalFilterResetBtn" class="md-button md-button--outlined md-button--small">
+                  <span class="material-symbols-rounded">restart_alt</span>
+                  Reset
+                </button>
+              </div>
+            </div>
+            <div id="requestPortalAllRequestsStatus" class="text-muted">Managers only.</div>
+            <div class="request-portal-table-wrapper">
+              <table class="data-grid-table request-portal-table">
+                <thead>
+                  <tr>
+                    <th>Request</th>
+                    <th>Requester</th>
+                    <th>Status</th>
+                    <th>Requested</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="requestPortalAllRequestsBody"></tbody>
               </table>
             </div>
           </div>
