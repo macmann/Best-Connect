@@ -3,6 +3,39 @@
   const token = window.location.pathname.split('/').pop();
   const draftKey = `ai_interview_${token}`;
 
+  const defaultOrganizationName = 'HR Connect';
+  const defaultOrganizationLogoUrl = '';
+  const brandingLogoEl = document.getElementById('aiInterviewBrandLogo');
+
+  async function loadOrganizationBranding() {
+    if (!brandingLogoEl) return;
+
+    try {
+      const response = await fetch('/public/settings/organization');
+      if (!response.ok) throw new Error('Unable to load organization settings');
+      const settings = await response.json();
+      const organizationName = typeof settings?.portalName === 'string' && settings.portalName.trim()
+        ? settings.portalName.trim()
+        : defaultOrganizationName;
+      const logoUrl = typeof settings?.logoUrl === 'string' && settings.logoUrl.trim()
+        ? settings.logoUrl.trim()
+        : defaultOrganizationLogoUrl;
+
+      document.title = `${organizationName} AI Interview`;
+      if (logoUrl) {
+        brandingLogoEl.src = logoUrl;
+        brandingLogoEl.alt = `${organizationName} Logo`;
+        brandingLogoEl.style.removeProperty('display');
+      } else {
+        brandingLogoEl.removeAttribute('src');
+        brandingLogoEl.style.display = 'none';
+      }
+    } catch (err) {
+      brandingLogoEl.removeAttribute('src');
+      brandingLogoEl.style.display = 'none';
+    }
+  }
+
   function renderMessage(title, description) {
     root.innerHTML = `
       <div class="space-y-3 text-center">
@@ -75,7 +108,7 @@
 
     const greeting = `Hi ${session.candidateName || 'there'}, welcome to your written interview for ${
       session.positionTitle || 'this role'
-    } at Brillar.`;
+    } at Sagasia Consulting.`;
 
     root.innerHTML = `
       <div class="space-y-8">
@@ -225,6 +258,8 @@
       renderMessage('Invalid link', 'This interview link appears to be missing.');
       return;
     }
+
+    await loadOrganizationBranding();
 
     const session = await fetchSession();
     if (!session) return;
