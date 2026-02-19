@@ -9,6 +9,20 @@ async function createChatCompletionWithFallback(params) {
   try {
     return await client.chat.completions.create(params);
   } catch (err) {
+    if (err && err.code === 'model_not_found') {
+      const fallbackModel = process.env.OPENAI_FALLBACK_MODEL || 'gpt-4o-mini';
+      if (params.model !== fallbackModel) {
+        console.warn(
+          `Model ${params.model} not found; retrying with fallback model ${fallbackModel}.`,
+        );
+
+        return await client.chat.completions.create({
+          ...params,
+          model: fallbackModel,
+        });
+      }
+    }
+
     if (err && err.code === 'unsupported_value' && err.param === 'temperature') {
       const { temperature, ...retryParams } = params;
       console.warn(
@@ -44,7 +58,7 @@ Employment type: ${employmentType || ''}
 Description: ${description || ''}`;
 
   const response = await createChatCompletionWithFallback({
-    model: options.model || 'gpt-5.1-mini',
+    model: options.model || 'gpt-5-mini',
     messages: [
       { role: 'system', content: 'You output strictly valid JSON only. Do NOT include markdown code fences. Do NOT include explanations.' },
       { role: 'user', content: prompt }
@@ -119,7 +133,7 @@ ${payload.questions.map(q => {
 `;
 
   const response = await createChatCompletionWithFallback({
-    model: "gpt-5.1-mini",
+    model: "gpt-5-mini",
     messages: [
       { role: "system", content: "You are an HR assistant. Output strictly valid JSON." },
       { role: "user", content: prompt }

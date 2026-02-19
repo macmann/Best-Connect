@@ -2,12 +2,13 @@ const { init, getDatabase } = require('./db');
 
 const AI_MODEL_OPTIONS = [
   { value: 'gpt-5', label: 'GPT5' },
-  { value: 'gpt-5.1-mini', label: 'GPT5.1 mini' },
-  { value: 'gpt-5.1-nano', label: 'GPT5.1nano' }
+  { value: 'gpt-5-mini', label: 'GPT5 mini' },
+  { value: 'gpt-5-nano', label: 'GPT5 nano' },
+  { value: 'gpt-4o-mini', label: 'GPT-4o mini' }
 ];
 
 const DEFAULT_AI_SETTINGS = {
-  model: 'gpt-5.1-mini',
+  model: 'gpt-5-mini',
   questionPrompt: `You are an HR expert. Generate a list of 5-8 thoughtful written interview questions for a candidate applying for the following position.
 
 Return ONLY a valid JSON array of objects with fields:
@@ -45,7 +46,12 @@ let aiSettingsCache = { value: null, loadedAt: 0 };
 
 function normalizeAiSettings(raw = {}) {
   const allowedValues = new Set(AI_MODEL_OPTIONS.map(option => option.value));
-  const model = allowedValues.has(raw.model) ? raw.model : DEFAULT_AI_SETTINGS.model;
+  const legacyModelAliases = {
+    'gpt-5.1-mini': 'gpt-5-mini',
+    'gpt-5.1-nano': 'gpt-5-nano'
+  };
+  const requestedModel = legacyModelAliases[raw.model] || raw.model;
+  const model = allowedValues.has(requestedModel) ? requestedModel : DEFAULT_AI_SETTINGS.model;
   const questionPrompt = typeof raw.questionPrompt === 'string' && raw.questionPrompt.trim()
     ? raw.questionPrompt.trim()
     : DEFAULT_AI_SETTINGS.questionPrompt;
