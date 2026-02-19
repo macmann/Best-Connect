@@ -131,7 +131,7 @@ app.options(
 const BODY_LIMIT = process.env.BODY_LIMIT || '3mb';
 
 // Default admin credentials (can be overridden with env vars)
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@hrconnet.site';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@sagasiaconsulting.com';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 
 const MANAGER_ROLES = new Set(['manager', 'superadmin']);
@@ -3046,7 +3046,7 @@ async function authRequired(req, res, next) {
 
   req.user = {
     id: 'public-admin',
-    email: ADMIN_EMAIL || 'public@hrconnet.site',
+    email: ADMIN_EMAIL || 'public@sagasiaconsulting.com',
     role: 'manager',
     employeeId: null
   };
@@ -5175,24 +5175,24 @@ init().then(async () => {
   const DEFAULT_CAREER_PAGE_TEMPLATE = {
     headerBackgroundColor: '#1e3a8a',
     header: `<div class="max-w-5xl mx-auto px-6 py-16">
-  <p class="text-sm uppercase tracking-widest text-blue-100">Brillar Careers</p>
+  <p class="text-sm uppercase tracking-widest text-blue-100">Sagasia Consulting Careers</p>
   <h1 class="text-4xl sm:text-5xl font-bold mt-4">Your Digital Transformation Partner</h1>
   <h2 class="text-2xl sm:text-3xl font-semibold mt-2 text-blue-100">Transforming tomorrow</h2>
-  <p class="mt-4 max-w-3xl text-lg text-blue-100">Join Brillar and help drive digital transformation across Southeast Asia.</p>
+  <p class="mt-4 max-w-3xl text-lg text-blue-100">Join Sagasia Consulting and help drive digital transformation across Southeast Asia.</p>
   <div class="mt-8">
     <a id="view-open-positions" href="#open-positions" class="inline-block px-6 py-3 bg-white text-blue-700 font-semibold rounded-md shadow hover:bg-blue-50">View Open Positions</a>
   </div>
 </div>`,
     updates: `<div class="bg-white rounded-2xl shadow-lg p-6 sm:p-8">
-  <h3 class="text-2xl font-semibold text-gray-900">Careers at Brillar</h3>
-  <p class="mt-3 text-gray-600">At Brillar, we are passionate about empowering organizations through technology. Join a team that values innovation, collaboration, and making a meaningful impact for our partners across the region.</p>
+  <h3 class="text-2xl font-semibold text-gray-900">Careers at Sagasia Consulting</h3>
+  <p class="mt-3 text-gray-600">At Sagasia Consulting, we are passionate about empowering organizations through technology. Join a team that values innovation, collaboration, and making a meaningful impact for our partners across the region.</p>
 </div>`,
     content: `<div id="job-detail" class="bg-white rounded-xl shadow p-6 sm:p-8">
   <h3 class="text-xl font-semibold text-gray-900">Explore our openings</h3>
   <p class="text-gray-600 mt-2">Select a role to view details and apply.</p>
 </div>`,
     footer: `<div class="max-w-5xl mx-auto px-6 text-center space-y-1">
-  <p>© Brillar. All rights reserved.</p>
+  <p>© Sagasia Consulting. All rights reserved.</p>
 </div>`
   };
 
@@ -7545,7 +7545,7 @@ init().then(async () => {
     const managementOpenApi = {
       openapi: '3.0.0',
       info: {
-        title: 'Brillar HR Management APIs',
+        title: 'Sagasia Consulting HR Management APIs',
         version: '1.0.0',
         description:
           'Unauthenticated endpoints that provide aggregated employee and leave information for manager accounts.'
@@ -7745,7 +7745,7 @@ init().then(async () => {
     const openApiSpec = {
       openapi: '3.0.0',
       info: {
-        title: 'Brillar HR Portal Leave APIs',
+        title: 'Sagasia Consulting HR Portal Leave APIs',
         version: '1.0.0',
         description:
           'API specification for leave management helper endpoints.'
