@@ -235,7 +235,7 @@ async function buildPerformanceCycleAiSummary({ cycleYear, employeeRows }) {
     ].join('\n');
 
     const completion = await client.chat.completions.create({
-      model: process.env.OPENAI_PERFORMANCE_REPORT_MODEL || 'gpt-5.1-mini',
+      model: process.env.OPENAI_PERFORMANCE_REPORT_MODEL || 'gpt-5-mini',
       messages: [
         { role: 'system', content: 'You are an HR analytics assistant. Respond with plain text only.' },
         { role: 'user', content: prompt }
