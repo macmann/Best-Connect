@@ -163,14 +163,20 @@
 
       setStatus('connecting', 'Creating secure voice session...');
       const realtime = await requestRealtimeSession();
+      const transport = realtime?.transport || 'webrtc';
       const ephemeralKey = realtime?.client_secret?.value;
       const model = realtime?.session?.model || state.metadata?.realtimeConfig?.model || 'gpt-4o-realtime-preview-2024-12-17';
+      const iceServers = Array.isArray(realtime?.iceServers) ? realtime.iceServers : [];
+
+      if (transport !== 'webrtc') {
+        throw new Error(`unsupported_transport:${transport}`);
+      }
 
       if (!ephemeralKey) {
         throw new Error('missing_client_secret');
       }
 
-      const pc = new RTCPeerConnection();
+      const pc = new RTCPeerConnection({ iceServers });
       state.pc = pc;
       state.stream.getTracks().forEach(track => pc.addTrack(track, state.stream));
 
@@ -258,7 +264,12 @@
       setStatus('listening', 'Connected. Start speaking when ready.');
     } catch (err) {
       console.error('Failed to start voice interview', err);
-      setStatus('error', 'Unable to start voice interview. Please refresh and try again.');
+      if (String(err?.message || '').startsWith('unsupported_transport:')) {
+        const transport = err.message.split(':').slice(1).join(':') || 'unknown';
+        setStatus('error', `Unsupported realtime transport "${transport}". Please contact support.`);
+      } else {
+        setStatus('error', 'Unable to start voice interview. Please refresh and try again.');
+      }
       startBtn.disabled = false;
     }
   }

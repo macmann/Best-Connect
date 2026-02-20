@@ -405,6 +405,8 @@ router.post('/ai-voice-interview/:token/realtime-session', async (req, res) => {
     );
 
     return res.status(201).json({
+      transport: 'webrtc',
+      iceServers: Array.isArray(REALTIME_CONFIG.iceServers) ? REALTIME_CONFIG.iceServers : [],
       client_secret: {
         value: clientSecret,
         expires_at: realtimeSession?.client_secret?.expires_at || realtimeSession?.expires_at || null
