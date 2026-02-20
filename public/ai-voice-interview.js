@@ -20,6 +20,8 @@
     interviewTimer: null
   };
 
+  const interviewCompletedMessage = 'Interview completed. If you need to retake, please contact the company.';
+
   function disableInterviewControls() {
     ['startBtn', 'muteBtn', 'endBtn'].forEach(id => {
       const button = document.getElementById(id);
@@ -98,7 +100,7 @@
       setStatus('completed', 'Interview time limit reached. Submitting your session...');
       await completeInterview('timeout');
       teardownConnection();
-      setStatus('completed', 'Interview ended due to time limit. Thank you.');
+      setStatus('completed', interviewCompletedMessage);
     }, maxDurationSec * 1000);
   }
 
@@ -161,9 +163,10 @@
     document.getElementById('startBtn').addEventListener('click', startVoiceInterview);
     document.getElementById('muteBtn').addEventListener('click', toggleMute);
     document.getElementById('endBtn').addEventListener('click', async () => {
-      await completeInterview('manual_end');
+      setStatus('completed', interviewCompletedMessage);
+      disableInterviewControls();
       teardownConnection();
-      setStatus('completed', 'Interview ended. Thank you.');
+      await completeInterview('manual_end');
     });
     updateMuteButton();
     updateActionButtons();
@@ -256,7 +259,7 @@
       const payload = await response.json().catch(() => ({}));
       if (payload?.status === 'completed_due_to_timeout') {
         disableInterviewControls();
-        setStatus('completed', 'Interview ended due to time limit. Thank you.');
+        setStatus('completed', interviewCompletedMessage);
       }
       return payload;
     } catch (err) {
