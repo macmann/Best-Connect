@@ -9,10 +9,11 @@
     pc: null,
     channel: null,
     connected: false,
+    hasStarted: false,
     muted: false,
-    transcriptVisible: false,
     status: 'idle',
     transcriptTurns: [],
+    currentQuestion: '',
     askedQuestionIds: new Set(),
     completeSent: false,
     disconnectTimer: null,
@@ -20,10 +21,64 @@
   };
 
   function disableInterviewControls() {
-    ['startBtn', 'muteBtn', 'repeatBtn', 'endBtn'].forEach(id => {
+    ['startBtn', 'muteBtn', 'endBtn'].forEach(id => {
       const button = document.getElementById(id);
       if (button) button.disabled = true;
     });
+  }
+
+  function updateMuteButton() {
+    const muteBtn = document.getElementById('muteBtn');
+    if (!muteBtn) return;
+    muteBtn.textContent = state.muted ? '🔇' : '🔊';
+    muteBtn.setAttribute('aria-label', state.muted ? 'Unmute microphone' : 'Mute microphone');
+    muteBtn.title = state.muted ? 'Unmute microphone' : 'Mute microphone';
+  }
+
+  function updateActionButtons() {
+    const startBtn = document.getElementById('startBtn');
+    const endBtn = document.getElementById('endBtn');
+    if (!startBtn || !endBtn) return;
+
+    if (state.hasStarted) {
+      startBtn.classList.add('hidden');
+      endBtn.classList.remove('hidden');
+    } else {
+      startBtn.classList.remove('hidden');
+      endBtn.classList.add('hidden');
+    }
+  }
+
+  function setCurrentQuestion(questionText) {
+    state.currentQuestion = typeof questionText === 'string' ? questionText.trim() : '';
+    const questionTextEl = document.getElementById('currentQuestionText');
+    if (!questionTextEl) return;
+    questionTextEl.textContent = state.currentQuestion || 'Waiting for the first question...';
+  }
+
+  function updateVoiceVisualizer() {
+    const visualizer = document.getElementById('voiceVisualizer');
+    if (!visualizer) return;
+
+    const isSessionActive = state.hasStarted || state.connected;
+    visualizer.className = `rounded-2xl border p-8 sm:p-12 text-center transition-all duration-300 ${
+      isSessionActive
+        ? 'border-violet-200 bg-gradient-to-br from-violet-50 to-indigo-100'
+        : 'border-slate-200 bg-slate-50'
+    }`;
+
+    visualizer.innerHTML = isSessionActive
+      ? `
+        <p class="text-sm uppercase tracking-wide text-violet-700 mb-6">AI Voice is active</p>
+        <div class="flex items-end justify-center gap-3 h-28">
+          <span class="w-4 h-10 rounded-full bg-violet-500 animate-pulse" style="animation-delay:0ms"></span>
+          <span class="w-4 h-20 rounded-full bg-indigo-500 animate-pulse" style="animation-delay:180ms"></span>
+          <span class="w-4 h-14 rounded-full bg-violet-500 animate-pulse" style="animation-delay:360ms"></span>
+          <span class="w-4 h-24 rounded-full bg-indigo-500 animate-pulse" style="animation-delay:540ms"></span>
+          <span class="w-4 h-12 rounded-full bg-violet-500 animate-pulse" style="animation-delay:720ms"></span>
+        </div>
+      `
+      : '<p class="text-slate-500">Start the interview to activate AI voice animation.</p>';
   }
 
   function clearInterviewTimer() {
@@ -69,28 +124,7 @@
     if (detailEl) {
       detailEl.textContent = detail || '';
     }
-  }
-
-  function renderTranscript() {
-    const panel = document.getElementById('transcriptPanel');
-    if (!panel) return;
-
-    if (!state.transcriptVisible) {
-      panel.classList.add('hidden');
-      return;
-    }
-
-    panel.classList.remove('hidden');
-    panel.innerHTML = state.transcriptTurns.length
-      ? state.transcriptTurns
-          .map(turn => `
-            <div class="border border-slate-200 rounded-lg p-3">
-              <p class="text-xs uppercase tracking-wide text-slate-500">${escapeHtml(turn.role || 'candidate')}</p>
-              <p class="text-sm text-slate-800 mt-1">${escapeHtml(turn.text)}</p>
-            </div>
-          `)
-          .join('')
-      : '<p class="text-sm text-slate-500">Transcript will appear here once speech is captured.</p>';
+    updateVoiceVisualizer();
   }
 
   function renderApp() {
@@ -109,36 +143,31 @@
           <p id="statusDetail" class="text-sm text-blue-800">Grant microphone permission, then click start.</p>
         </div>
 
-        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <button id="startBtn" class="px-4 py-3 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700">Enable mic & start</button>
-          <button id="muteBtn" class="px-4 py-3 rounded-lg bg-slate-100 text-slate-800 font-semibold border border-slate-300 disabled:opacity-50" disabled>Mute</button>
-          <button id="repeatBtn" class="px-4 py-3 rounded-lg bg-slate-100 text-slate-800 font-semibold border border-slate-300 disabled:opacity-50" disabled>Repeat question</button>
-          <button id="toggleTranscriptBtn" class="px-4 py-3 rounded-lg bg-slate-100 text-slate-800 font-semibold border border-slate-300">Show transcript</button>
-          <button id="endBtn" class="px-4 py-3 rounded-lg bg-rose-600 text-white font-semibold hover:bg-rose-700 disabled:opacity-50" disabled>End interview</button>
-          <a href="/ai-interview/${encodeURIComponent(token)}" class="px-4 py-3 rounded-lg bg-white text-slate-800 font-semibold border border-slate-300 text-center">Switch to text</a>
+        <div id="voiceVisualizer" class="rounded-2xl border border-slate-200 bg-slate-50 p-8 sm:p-12 text-center"></div>
+
+        <div class="rounded-xl border border-slate-200 bg-white p-4 space-y-1">
+          <p class="text-xs uppercase tracking-wide text-slate-600">Current Question :</p>
+          <p id="currentQuestionText" class="text-base text-slate-900 font-medium">Waiting for the first question...</p>
         </div>
 
-        <div id="transcriptPanel" class="hidden rounded-xl border border-slate-200 p-4 space-y-3"></div>
+        <div class="flex flex-wrap gap-3 items-center">
+          <button id="startBtn" class="px-4 py-3 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700">Enable mic & start</button>
+          <button id="endBtn" class="hidden px-4 py-3 rounded-lg bg-rose-600 text-white font-semibold hover:bg-rose-700 disabled:opacity-50" disabled>End interview</button>
+          <button id="muteBtn" class="w-12 h-12 rounded-full bg-slate-100 text-xl border border-slate-300 disabled:opacity-50" disabled aria-label="Mute microphone" title="Mute microphone">🔊</button>
+        </div>
       </div>
     `;
 
     document.getElementById('startBtn').addEventListener('click', startVoiceInterview);
     document.getElementById('muteBtn').addEventListener('click', toggleMute);
-    document.getElementById('repeatBtn').addEventListener('click', repeatQuestion);
-    document.getElementById('toggleTranscriptBtn').addEventListener('click', () => {
-      state.transcriptVisible = !state.transcriptVisible;
-      document.getElementById('toggleTranscriptBtn').textContent = state.transcriptVisible
-        ? 'Hide transcript'
-        : 'Show transcript';
-      renderTranscript();
-    });
     document.getElementById('endBtn').addEventListener('click', async () => {
       await completeInterview('manual_end');
       teardownConnection();
       setStatus('completed', 'Interview ended. Thank you.');
     });
-
-    renderTranscript();
+    updateMuteButton();
+    updateActionButtons();
+    updateVoiceVisualizer();
   }
 
   async function fetchMetadata() {
@@ -201,6 +230,7 @@
   function askInterviewQuestion(questionText) {
     const text = typeof questionText === 'string' ? questionText.trim() : '';
     if (!state.channel || state.channel.readyState !== 'open' || !text) return;
+    setCurrentQuestion(text);
 
     state.channel.send(
       JSON.stringify({
@@ -238,11 +268,13 @@
   async function startVoiceInterview() {
     const startBtn = document.getElementById('startBtn');
     const muteBtn = document.getElementById('muteBtn');
-    const repeatBtn = document.getElementById('repeatBtn');
     const endBtn = document.getElementById('endBtn');
 
     try {
+      state.hasStarted = true;
+      updateActionButtons();
       startBtn.disabled = true;
+      endBtn.disabled = false;
       setStatus('connecting', 'Requesting microphone permission...');
       state.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
@@ -338,7 +370,6 @@
             };
 
             state.transcriptTurns.push(turn);
-            renderTranscript();
             const transcriptPayload = await sendTranscriptChunk(turn);
             const nextQuestion = transcriptPayload?.nextQuestion;
             if (nextQuestion?.id && !state.askedQuestionIds.has(nextQuestion.id)) {
@@ -371,7 +402,6 @@
       await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
 
       muteBtn.disabled = false;
-      repeatBtn.disabled = false;
       endBtn.disabled = false;
       setStatus('listening', 'Connected. Start speaking when ready.');
     } catch (err) {
@@ -389,7 +419,10 @@
         setStatus('error', 'Unable to start voice interview. Please refresh and try again.');
       }
       teardownConnection();
+      state.hasStarted = false;
+      updateActionButtons();
       startBtn.disabled = false;
+      endBtn.disabled = true;
     }
   }
 
@@ -402,26 +435,18 @@
 
     const muteBtn = document.getElementById('muteBtn');
     if (muteBtn) {
-      muteBtn.textContent = state.muted ? 'Unmute' : 'Mute';
+      updateMuteButton();
     }
-  }
-
-  function repeatQuestion() {
-    if (!state.channel || state.channel.readyState !== 'open') return;
-    state.channel.send(
-      JSON.stringify({
-        type: 'response.create',
-        response: {
-          instructions: 'Please repeat the previous interview question exactly once.'
-        }
-      })
-    );
-    setStatus('speaking', 'Asking interviewer to repeat the question...');
   }
 
   function teardownConnection() {
     clearInterviewTimer();
     state.connected = false;
+    state.hasStarted = false;
+    state.muted = false;
+    updateActionButtons();
+    updateMuteButton();
+    updateVoiceVisualizer();
 
     if (state.channel && state.channel.readyState === 'open') {
       state.channel.close();
