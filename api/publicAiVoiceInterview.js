@@ -545,6 +545,9 @@ router.post('/ai-voice-interview/:token/transcript', async (req, res) => {
     const now = new Date();
     const { elapsedSec } = getElapsedVoiceDurationSec(session, now);
     const hasDurationLimit = Number.isFinite(REALTIME_CONFIG.maxDurationSec) && REALTIME_CONFIG.maxDurationSec > 0;
+    const timeRemainingSec = hasDurationLimit
+      ? Math.max(0, REALTIME_CONFIG.maxDurationSec - elapsedSec)
+      : null;
     const isTimedOut = hasDurationLimit && elapsedSec >= REALTIME_CONFIG.maxDurationSec;
 
     if (isTimedOut) {
@@ -562,12 +565,18 @@ router.post('/ai-voice-interview/:token/transcript', async (req, res) => {
 
     finalizedTurns.forEach(turn => {
       if (turn.role === 'candidate') {
-        orchestrationState = score_answer({ session: { ...session, orchestration: orchestrationState }, turn });
+        const scoreContract = score_answer({
+          session: { ...session, orchestration: orchestrationState },
+          turn,
+          timeRemainingSec
+        });
+        orchestrationState = scoreContract.orchestration;
       }
     });
 
     const nextQuestionContract = next_question({
-      session: { ...session, orchestration: orchestrationState }
+      session: { ...session, orchestration: orchestrationState },
+      timeRemainingSec
     });
     orchestrationState = nextQuestionContract.orchestration;
 
@@ -577,7 +586,15 @@ router.post('/ai-voice-interview/:token/transcript', async (req, res) => {
         $push: { 'voice.transcriptTurns': { $each: finalizedTurns } },
         $set: {
           status: session.status === 'pending' || session.status === 'sent' ? 'started' : session.status,
-          orchestration: orchestrationState,
+          orchestration: {
+            ...orchestrationState,
+            coverage: orchestrationState.coverage || {},
+            difficulty: orchestrationState.difficulty || 'medium',
+            phase: orchestrationState.phase || 'intro',
+            lastTransitionReason: orchestrationState.lastTransitionReason || null,
+            lastTranscriptUpdateAt: now.toISOString(),
+            timeRemainingSec
+          },
           'audit.promptVersion': orchestrationState.promptVersion || PROMPT_VERSION,
           'audit.rubricVersion': orchestrationState.rubricVersion || null,
           'audit.scoringVersion': orchestrationState.scoringVersion || null,
@@ -620,6 +637,9 @@ router.post('/ai-voice-interview/:token/complete', async (req, res) => {
     const now = new Date();
     const { elapsedSec } = getElapsedVoiceDurationSec(session, now);
     const hasDurationLimit = Number.isFinite(REALTIME_CONFIG.maxDurationSec) && REALTIME_CONFIG.maxDurationSec > 0;
+    const timeRemainingSec = hasDurationLimit
+      ? Math.max(0, REALTIME_CONFIG.maxDurationSec - elapsedSec)
+      : null;
     const isTimedOut = hasDurationLimit && elapsedSec >= REALTIME_CONFIG.maxDurationSec;
 
     const completion = await finalizeVoiceInterviewSession(req, {
