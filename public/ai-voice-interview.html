@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HR Connect AI Voice Interview</title>
+  <link rel="icon" href="/logo.png" />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <header class="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-slate-200">
+    <nav class="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <img id="brandLogo" src="/logo.png" alt="Organization logo" class="h-10 w-auto" />
+        <p id="brandName" class="font-semibold">HR Connect</p>
+      </div>
+      <a href="/careers" class="text-sm font-medium text-blue-600 hover:text-blue-700">Careers</a>
+    </nav>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-6 py-10 space-y-6">
+    <section class="rounded-2xl bg-gradient-to-r from-blue-900 to-indigo-600 text-white p-6 sm:p-8 shadow-lg">
+      <p class="uppercase tracking-wider text-xs text-blue-200">AI Voice Interview</p>
+      <h1 class="text-3xl sm:text-4xl font-bold mt-2">Interview with Voice</h1>
+      <p id="heroCopy" class="mt-3 text-blue-100">Allow microphone access, then start when you're ready. Your responses are transcribed and submitted automatically.</p>
+    </section>
+
+    <section id="appRoot" class="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 sm:p-8">
+      <p class="text-slate-600">Loading interview…</p>
+    </section>
+  </main>
+
+  <audio id="remoteAudio" autoplay></audio>
+  <script src="/ai-voice-interview.js" defer></script>
+</body>
+</html>
