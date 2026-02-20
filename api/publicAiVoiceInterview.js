@@ -1,6 +1,12 @@
 const express = require('express');
 const { getDatabase } = require('../db');
-const { analyzeInterviewResponses } = require('../openaiClient');
+const {
+  score_answer,
+  next_question,
+  buildInitialOrchestration,
+  finalizeOrchestration
+} = require('../services/aiVoiceInterviewOrchestrator');
+const { buildVoiceResult } = require('../services/aiVoiceInterviewScoring');
 
 const router = express.Router();
 
@@ -203,48 +209,15 @@ async function enqueueFinalAnalysisAndNotification(req, sessionId) {
       const session = await db.collection('ai_interview_sessions').findOne({ _id: sessionId });
       if (!session || session.aiResultId) return;
 
-      const questions = mapQuestions(session.aiInterviewQuestions);
-      const transcriptTurns = Array.isArray(session.voice?.transcriptTurns)
-        ? session.voice.transcriptTurns
-        : [];
-
-      const candidateAnswers = transcriptTurns
-        .filter(turn => turn.role === 'candidate' && typeof turn.text === 'string' && turn.text.trim())
-        .map((turn, index) => ({
-          questionId: questions[index]?.id || `voice_q${index + 1}`,
-          answerText: turn.text.trim()
-        }));
-
-      if (!candidateAnswers.length) return;
-
       const candidate = await db.collection('candidates').findOne({ _id: session.candidateId });
       const position = await db.collection('positions').findOne({ _id: session.positionId });
 
-      const payload = {
-        positionTitle: position?.title || session.positionTitle,
-        positionDescription: position?.description,
-        candidateName: buildCandidateName(candidate),
-        questions,
-        answers: candidateAnswers
-      };
-
-      const analysis = await analyzeInterviewResponses(payload);
-      const { result, raw } = analysis;
-
-      const aiResultDoc = {
-        sessionId: session._id,
+      const aiResultDoc = buildVoiceResult({
+        session,
         applicationId: session.applicationId,
         candidateId: session.candidateId,
-        positionId: session.positionId,
-        scores: result.scores || {},
-        verdict: result.verdict || 'hold',
-        summary: result.summary || '',
-        strengths: result.strengths || [],
-        risks: result.risks || [],
-        recommendedNextSteps: result.recommendedNextSteps || [],
-        rawModelResponse: raw,
-        createdAt: new Date()
-      };
+        positionId: session.positionId
+      });
 
       const insertResult = await db.collection('ai_interview_results').insertOne(aiResultDoc);
 
@@ -263,7 +236,7 @@ async function enqueueFinalAnalysisAndNotification(req, sessionId) {
         candidateName: buildCandidateName(candidate),
         positionTitle: position?.title || session.positionTitle,
         candidateEmail: candidate?.email || null,
-        result: result || {}
+        result: aiResultDoc || {}
       });
     } catch (err) {
       console.error('Failed to process final voice interview analysis:', err);
@@ -312,7 +285,8 @@ router.get('/ai-voice-interview/:token', async (req, res) => {
         model: REALTIME_MODEL,
         voice: REALTIME_VOICE,
         transcriptionModel: REALTIME_TRANSCRIPTION_MODEL
-      }
+      },
+      orchestration: buildInitialOrchestration(session)
     });
   } catch (err) {
     console.error('Error fetching AI voice interview session:', err);
@@ -399,6 +373,18 @@ router.post('/ai-voice-interview/:token/transcript', async (req, res) => {
 
     const now = new Date();
     const shouldMarkStarted = !session.voice?.startedAt;
+    let orchestrationState = buildInitialOrchestration(session);
+
+    finalizedTurns.forEach(turn => {
+      if (turn.role === 'candidate') {
+        orchestrationState = score_answer({ session: { ...session, orchestration: orchestrationState }, turn });
+      }
+    });
+
+    const nextQuestionContract = next_question({
+      session: { ...session, orchestration: orchestrationState }
+    });
+    orchestrationState = nextQuestionContract.orchestration;
 
     await db.collection('ai_interview_sessions').updateOne(
       { _id: session._id },
@@ -406,12 +392,17 @@ router.post('/ai-voice-interview/:token/transcript', async (req, res) => {
         $push: { 'voice.transcriptTurns': { $each: finalizedTurns } },
         $set: {
           status: session.status === 'pending' || session.status === 'sent' ? 'started' : session.status,
+          orchestration: orchestrationState,
           ...(shouldMarkStarted ? { startedAt: now, 'voice.startedAt': now } : {})
         }
       }
     );
 
-    return res.status(201).json({ appended: finalizedTurns.length });
+    return res.status(201).json({
+      appended: finalizedTurns.length,
+      orchestration: orchestrationState,
+      nextQuestion: nextQuestionContract.question
+    });
   } catch (err) {
     console.error('Error appending voice transcript turns:', err);
     return res.status(500).json({ error: 'failed_to_append_transcript' });
@@ -436,6 +427,7 @@ router.post('/ai-voice-interview/:token/complete', async (req, res) => {
     const now = new Date();
     const startedAt = toDate(session.voice?.startedAt || session.startedAt) || now;
     const durationSec = Math.max(0, Math.round((now.getTime() - startedAt.getTime()) / 1000));
+    const finalizedOrchestration = finalizeOrchestration({ session, endedAt: now });
 
     await db.collection('ai_interview_sessions').updateOne(
       { _id: session._id, status: { $ne: 'completed' } },
@@ -446,6 +438,7 @@ router.post('/ai-voice-interview/:token/complete', async (req, res) => {
           'voice.startedAt': startedAt,
           'voice.endedAt': now,
           'voice.durationSec': durationSec,
+          orchestration: finalizedOrchestration,
           analysisStatus: 'queued',
           analysisQueuedAt: now
         }
