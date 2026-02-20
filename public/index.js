@@ -10467,28 +10467,28 @@ function renderCandidateAiInterviewPanel(candidate, options = {}) {
   const displayEmail = candidateEmail ? String(candidateEmail) : 'Not provided';
 
   let html = `
-    <div class="space-y-3">
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="px-2 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700">${escapeHtml(
+    <div class="ai-interview-session-card">
+      <div class="ai-interview-session-pills">
+        <span class="ai-interview-pill ai-interview-pill--status">${escapeHtml(
           status.label
         )}</span>
-        <span class="px-2 py-1 rounded-full text-[11px] font-semibold bg-purple-50 text-purple-700">Mode: ${escapeHtml(modeLabel)}</span>
+        <span class="ai-interview-pill ai-interview-pill--mode">Mode: ${escapeHtml(modeLabel)}</span>
         ${verdictLabel
-          ? `<span class="px-2 py-1 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-800">${verdictLabel}</span>`
+          ? `<span class="ai-interview-pill ai-interview-pill--verdict">${verdictLabel}</span>`
           : ''}
       </div>
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-gray-700">
-        <div>
-          <div class="text-[11px] uppercase tracking-wide text-gray-500">Candidate Email</div>
-          <div class="text-sm text-gray-900">${escapeHtml(displayEmail)}</div>
+      <div class="ai-interview-session-grid">
+        <div class="ai-interview-session-meta-item">
+          <div class="ai-interview-session-label">Candidate Email</div>
+          <div class="ai-interview-session-value">${escapeHtml(displayEmail)}</div>
         </div>
-        <div>
-          <div class="text-[11px] uppercase tracking-wide text-gray-500">Interview Mode</div>
-          <div class="text-sm text-gray-900">${escapeHtml(modeLabel)}</div>
+        <div class="ai-interview-session-meta-item">
+          <div class="ai-interview-session-label">Interview Mode</div>
+          <div class="ai-interview-session-value">${escapeHtml(modeLabel)}</div>
         </div>
-        <div>
-          <div class="text-[11px] uppercase tracking-wide text-gray-500">Invitation Status</div>
-          <div class="text-sm text-gray-900">${escapeHtml(status.description)}</div>
+        <div class="ai-interview-session-meta-item ai-interview-session-meta-item--wide">
+          <div class="ai-interview-session-label">Invitation Status</div>
+          <div class="ai-interview-session-value">${escapeHtml(status.description)}</div>
         </div>
       </div>
     </div>`;
@@ -10498,7 +10498,7 @@ function renderCandidateAiInterviewPanel(candidate, options = {}) {
       data.session?.status === 'completed'
         ? 'Candidate finished the AI interview. Analysis is being generated and the recruiter will receive an email update.'
         : 'AI interview sent. Waiting for the candidate to complete the interview. The recruiter will be notified automatically.';
-    html += `<p class="text-xs text-gray-700">${escapeHtml(pendingMessage)}</p>`;
+    html += `<p class="ai-interview-session-note">${escapeHtml(pendingMessage)}</p>`;
   } else {
     const { result } = data;
     const scores = result.scores || {};
