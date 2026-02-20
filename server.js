@@ -2971,6 +2971,10 @@ app.get('/ai-interview/:token', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'ai-interview.html'));
 });
 
+app.get('/ai-voice-interview/:token', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'ai-voice-interview.html'));
+});
+
 function resolveToken(req) {
   const headerToken = req.headers.authorization?.split(' ')[1];
   const cookieToken = req.cookies?.[SESSION_COOKIE_NAME];
