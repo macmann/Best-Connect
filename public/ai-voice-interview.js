@@ -16,7 +16,8 @@
     askedQuestionIds: new Set(),
     completeSent: false,
     disconnectTimer: null,
-    interviewTimer: null
+    interviewTimer: null,
+    interviewStarted: false
   };
 
   function disableInterviewControls() {
@@ -24,6 +25,13 @@
       const button = document.getElementById(id);
       if (button) button.disabled = true;
     });
+  }
+
+  function setStartButtonStartedState() {
+    const startBtn = document.getElementById('startBtn');
+    if (!startBtn) return;
+    startBtn.disabled = true;
+    startBtn.textContent = 'Mic enabled';
   }
 
   function clearInterviewTimer() {
@@ -110,7 +118,7 @@
         </div>
 
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <button id="startBtn" class="px-4 py-3 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700">Enable mic & start</button>
+          <button id="startBtn" class="px-4 py-3 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">Enable mic & start</button>
           <button id="muteBtn" class="px-4 py-3 rounded-lg bg-slate-100 text-slate-800 font-semibold border border-slate-300 disabled:opacity-50" disabled>Mute</button>
           <button id="repeatBtn" class="px-4 py-3 rounded-lg bg-slate-100 text-slate-800 font-semibold border border-slate-300 disabled:opacity-50" disabled>Repeat question</button>
           <button id="toggleTranscriptBtn" class="px-4 py-3 rounded-lg bg-slate-100 text-slate-800 font-semibold border border-slate-300">Show transcript</button>
@@ -133,6 +141,10 @@
       renderTranscript();
     });
     document.getElementById('endBtn').addEventListener('click', async () => {
+      if (!state.interviewStarted) return;
+
+      disableInterviewControls();
+      setStatus('completed', 'Ending interview and submitting your session...');
       await completeInterview('manual_end');
       teardownConnection();
       setStatus('completed', 'Interview ended. Thank you.');
@@ -373,6 +385,8 @@
       muteBtn.disabled = false;
       repeatBtn.disabled = false;
       endBtn.disabled = false;
+      state.interviewStarted = true;
+      setStartButtonStartedState();
       setStatus('listening', 'Connected. Start speaking when ready.');
     } catch (err) {
       console.error('Failed to start voice interview', err);
@@ -390,6 +404,7 @@
       }
       teardownConnection();
       startBtn.disabled = false;
+      startBtn.textContent = 'Enable mic & start';
     }
   }
 
@@ -422,6 +437,7 @@
   function teardownConnection() {
     clearInterviewTimer();
     state.connected = false;
+    state.interviewStarted = false;
 
     if (state.channel && state.channel.readyState === 'open') {
       state.channel.close();
