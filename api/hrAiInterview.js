@@ -32,6 +32,14 @@ function normalizeSessionMode(mode) {
   return mode === 'voice' ? 'voice' : 'text';
 }
 
+function isRealtimeInterviewEnabled() {
+  const explicitToggle =
+    process.env.AI_REALTIME_ENABLED === 'true' ||
+    process.env.ENABLE_AI_VOICE_INTERVIEW === 'true';
+
+  return Boolean(process.env.OPENAI_API_KEY && explicitToggle);
+}
+
 function buildVoiceDefaults(voice) {
   return {
     startedAt: voice?.startedAt || null,
@@ -117,6 +125,7 @@ router.post('/ai-interview/sessions', async (req, res) => {
   try {
     const db = getDatabase();
     const { applicationId, mode } = req.body;
+    const normalizedMode = normalizeSessionMode(mode);
 
     if (!applicationId) {
       return res.status(400).json({ error: 'applicationId_required' });
@@ -147,6 +156,16 @@ router.post('/ai-interview/sessions', async (req, res) => {
       return res.status(404).json({ error: 'candidate_or_position_not_found' });
     }
 
+    if (normalizedMode === 'voice') {
+      if (!isRealtimeInterviewEnabled()) {
+        return res.status(400).json({ error: 'voice_realtime_not_enabled' });
+      }
+
+      if (!candidate.email) {
+        return res.status(400).json({ error: 'candidate_email_required_for_voice_mode' });
+      }
+    }
+
     const questions = Array.isArray(position.aiInterviewQuestions)
       ? position.aiInterviewQuestions
       : [];
@@ -156,7 +175,6 @@ router.post('/ai-interview/sessions', async (req, res) => {
     }
 
     const token = generateInterviewToken();
-    const normalizedMode = normalizeSessionMode(mode);
     const sessionDoc = {
       token,
       applicationId: application._id,
@@ -177,7 +195,8 @@ router.post('/ai-interview/sessions', async (req, res) => {
 
     const result = await db.collection('ai_interview_sessions').insertOne(sessionDoc);
 
-    const interviewPath = `/ai-interview/${token}`;
+    const interviewPath =
+      normalizedMode === 'voice' ? `/ai-voice-interview/${token}` : `/ai-interview/${token}`;
     const interviewUrl = buildInterviewUrl(req, interviewPath);
 
     const sendEmail = req.app?.locals?.sendEmail;
@@ -185,18 +204,20 @@ router.post('/ai-interview/sessions', async (req, res) => {
     if (candidate.email && typeof sendEmail === 'function') {
       const candidateName = buildCandidateName(candidate) || 'there';
       const positionTitle = position.title || 'the position';
+      const interviewModeLabel = normalizedMode === 'voice' ? 'voice interview' : 'written interview';
       const emailLines = [
         `Hi ${candidateName},`,
         '',
-        `You have been invited to complete an AI interview for ${positionTitle}.`,
+        `You have been invited to complete a ${interviewModeLabel} for ${positionTitle}.`,
         `Start your interview here: ${interviewUrl || interviewPath}`,
         '',
+        `This invitation is for a ${interviewModeLabel}.`,
         'Please complete the interview at your earliest convenience.'
       ];
       try {
         await sendEmail(
           candidate.email,
-          `Your AI interview for ${positionTitle}`,
+          `Your AI ${interviewModeLabel} for ${positionTitle}`,
           emailLines.join('\n')
         );
         emailSent = true;
@@ -207,10 +228,10 @@ router.post('/ai-interview/sessions', async (req, res) => {
 
     return res.status(201).json({
       sessionId: result.insertedId,
+      token,
+      mode: normalizedMode,
       interviewPath,
       interviewUrl,
-      token,
-      candidateEmail: candidate.email,
       emailSent
     });
   } catch (err) {
