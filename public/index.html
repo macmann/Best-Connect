@@ -4878,8 +4878,8 @@
     /* Login card visual refinements scoped in-page */
     .login-card {
       position: relative;
-      background: linear-gradient(165deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.9));
-      border: 1px solid rgba(148, 163, 184, 0.22);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(252, 253, 255, 0.94));
+      border: 1px solid rgba(15, 23, 42, 0.08);
     }
 
     .login-card::after {
@@ -4887,7 +4887,7 @@
       position: absolute;
       inset: 0;
       border-radius: inherit;
-      background: linear-gradient(145deg, rgba(58, 111, 248, 0.08), transparent 35%, rgba(103, 80, 164, 0.08));
+      background: linear-gradient(150deg, rgba(37, 99, 235, 0.06), transparent 38%, rgba(15, 23, 42, 0.04));
       pointer-events: none;
     }
 
@@ -4906,14 +4906,15 @@
     .login-kicker {
       margin: 0;
       text-transform: uppercase;
-      letter-spacing: 0.13em;
+      letter-spacing: 0.14em;
       font-size: 0.72rem;
       font-weight: 800;
-      color: #334155;
+      color: #1d4ed8;
     }
 
     .login-title {
       font-weight: 750;
+      letter-spacing: -0.01em;
     }
 
     .login-security-strip {
@@ -4929,8 +4930,8 @@
       gap: 6px;
       padding: 6px 10px;
       border-radius: 999px;
-      background: rgba(58, 111, 248, 0.09);
-      color: #1e40af;
+      background: rgba(30, 64, 175, 0.08);
+      color: #1e3a8a;
       font-size: 0.78rem;
       font-weight: 700;
     }
@@ -4951,6 +4952,46 @@
       color: #475569;
     }
 
+    .login-divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: -2px 0;
+      color: #64748b;
+      font-size: 0.76rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .login-divider::before,
+    .login-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(to right, rgba(148, 163, 184, 0), rgba(148, 163, 184, 0.55), rgba(148, 163, 184, 0));
+    }
+
+    .login-meta {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      font-size: 0.75rem;
+      color: #64748b;
+    }
+
+    .login-meta span {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .login-meta .material-symbols-rounded {
+      font-size: 0.95rem;
+      color: #334155;
+    }
+
   </style>
 </head>
 <body class="app-shell">
@@ -4964,7 +5005,7 @@
             People-first portal
           </p>
           <h1 id="welcomePortalName" class="welcome-title">Brillar HR Portal</h1>
-          <p class="welcome-copy">A cohesive workspace for leave, performance, recruitment, and talent experiences — all with Brillar's modern material-inspired feel.</p>
+          <p class="welcome-copy">A clean, connected workspace for leave, performance, recruitment, and talent operations designed for modern teams.</p>
         </div>
         <div class="welcome-badges">
           <span class="welcome-badge">
@@ -4990,7 +5031,7 @@
           <p class="login-kicker">Secure workforce access</p>
           <div>
             <h1 id="loginPortalName" class="login-title">Brillar HR Portal</h1>
-            <p class="login-subtitle">Sign in to manage leave, approvals, performance cycles, and talent workflows with confidence.</p>
+            <p class="login-subtitle">Welcome back. Sign in to continue with a secure and streamlined HR operations experience.</p>
           </div>
           <div class="login-security-strip" aria-hidden="true">
             <span class="login-security-item"><span class="material-symbols-rounded">verified_user</span>Enterprise security</span>
@@ -5016,10 +5057,16 @@
             <span class="material-symbols-rounded">login</span>
             Sign In
           </button>
+          <div class="login-divider">or continue with</div>
           <button id="msLoginBtn" type="button" class="md-button md-button--outlined">
             <span class="material-symbols-rounded">account_circle</span>
             Sign in with Microsoft 365
           </button>
+          <div class="login-meta" aria-hidden="true">
+            <span><span class="material-symbols-rounded">shield_lock</span>SSO ready</span>
+            <span><span class="material-symbols-rounded">encrypted</span>TLS encrypted</span>
+            <span><span class="material-symbols-rounded">schedule</span>24/7 access</span>
+          </div>
           <p class="login-help-text">Need help signing in? Contact your HR administrator or IT helpdesk.</p>
           <div id="loginError" class="form-error hidden"></div>
         </form>
