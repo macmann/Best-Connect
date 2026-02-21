@@ -201,8 +201,9 @@ The project ships with a starter `.env.example`. Key groups are summarized below
 
 ### Admin Bootstrap
 
-- `ADMIN_EMAIL`
-- `ADMIN_PASSWORD`
+- `ADMIN_EMAIL` (default `admin@b-connect.site`)
+- `ADMIN_PASSWORD` (default `admin`)
+- `DEFAULT_USER_PASSWORD` (used when creating employee login credentials automatically; default `bconnet`)
 
 ### Database
 

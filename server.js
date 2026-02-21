@@ -133,8 +133,9 @@ app.options(
 const BODY_LIMIT = process.env.BODY_LIMIT || '3mb';
 
 // Default admin credentials (can be overridden with env vars)
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@brillar.io';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@b-connect.site';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
+const DEFAULT_USER_PASSWORD = process.env.DEFAULT_USER_PASSWORD || 'bconnet';
 
 const MANAGER_ROLES = new Set(['manager', 'superadmin']);
 const REQUEST_STATUS_VALUES = ['open', 'in_progress', 'closed'];
@@ -2503,7 +2504,7 @@ function upsertUserForEmployee(emp) {
       changed = true;
     }
     if (!existing.password) {
-      existing.password = 'brillar';
+      existing.password = DEFAULT_USER_PASSWORD;
       changed = true;
     }
     return changed;
@@ -2512,7 +2513,7 @@ function upsertUserForEmployee(emp) {
   db.data.users.push({
     id: emp.id,
     email,
-    password: 'brillar',
+    password: DEFAULT_USER_PASSWORD,
     role,
     employeeId: emp.id
   });
