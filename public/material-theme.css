@@ -65,9 +65,9 @@ body {
   align-items: center;
   justify-content: center;
   padding: 32px 16px;
-  background: radial-gradient(circle at 16% 18%, rgba(219, 234, 254, 0.7), transparent 44%),
-              radial-gradient(circle at 92% 0%, rgba(191, 219, 254, 0.5), transparent 36%),
-              linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+  background: radial-gradient(circle at 20% 20%, rgba(155, 208, 255, 0.35), transparent 50%),
+              radial-gradient(circle at 80% 10%, rgba(131, 146, 253, 0.35), transparent 46%),
+              linear-gradient(135deg, rgba(11, 87, 208, 0.08), rgba(103, 80, 164, 0.08));
 }
 
 .landing-shell {
@@ -83,9 +83,11 @@ body {
   overflow: hidden;
   padding: 30px;
   border-radius: 28px;
-  background: linear-gradient(155deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  box-shadow: 0 18px 38px -30px rgba(15, 23, 42, 0.5);
+  background: linear-gradient(135deg, rgba(58, 111, 248, 0.12), rgba(108, 92, 231, 0.12)),
+              radial-gradient(circle at 10% 20%, rgba(16, 185, 129, 0.18), transparent 30%),
+              #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: var(--md-sys-shadow-card);
   display: grid;
   gap: 20px;
 }
@@ -94,8 +96,8 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at 86% 22%, rgba(37, 99, 235, 0.12), transparent 40%),
-              radial-gradient(circle at 32% 78%, rgba(15, 23, 42, 0.08), transparent 42%);
+  background: radial-gradient(circle at 85% 25%, rgba(58, 111, 248, 0.2), transparent 35%),
+              radial-gradient(circle at 60% 80%, rgba(16, 185, 129, 0.18), transparent 40%);
   pointer-events: none;
   opacity: 0.6;
 }
@@ -113,7 +115,7 @@ body {
   letter-spacing: 0.12em;
   font-weight: 800;
   font-size: 11px;
-  color: #1e3a8a;
+  color: #334155;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -121,7 +123,7 @@ body {
 
 .welcome-eyebrow .material-symbols-rounded {
   font-size: 18px;
-  color: #1d4ed8;
+  color: #2563eb;
 }
 
 .welcome-title {
@@ -152,15 +154,15 @@ body {
   gap: 8px;
   padding: 8px 12px;
   border-radius: 999px;
-  background: rgba(37, 99, 235, 0.1);
-  color: #1e40af;
+  background: rgba(58, 111, 248, 0.12);
+  color: #1d4ed8;
   font-weight: 700;
   letter-spacing: 0.01em;
 }
 
 .welcome-badge.success {
-  background: rgba(15, 23, 42, 0.08);
-  color: #1f2937;
+  background: rgba(16, 185, 129, 0.12);
+  color: #0f7b32;
 }
 
 .feature-pills {
@@ -177,23 +179,23 @@ body {
   gap: 8px;
   padding: 10px 12px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.76);
-  border: 1px solid #dbe3ef;
+  background: rgba(15, 23, 42, 0.02);
+  border: 1px solid #e2e8f0;
   color: #0f172a;
   font-weight: 600;
 }
 
 .feature-pill .material-symbols-rounded {
-  color: #2563eb;
+  color: #4f46e5;
 }
 
 .login-card {
   width: min(420px, 100%);
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(14px);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(18px);
   border-radius: 28px;
   padding: 40px 36px 44px;
-  box-shadow: 0 26px 44px -34px rgba(15, 23, 42, 0.6);
+  box-shadow: var(--md-sys-shadow-strong);
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -203,7 +205,7 @@ body {
 .brand-logo {
   width: 112px;
   align-self: center;
-  filter: drop-shadow(0 10px 16px rgba(37, 99, 235, 0.18));
+  filter: drop-shadow(0 14px 24px rgba(11, 87, 208, 0.25));
 }
 
 .login-title {

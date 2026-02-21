@@ -4876,10 +4876,56 @@
 
 
     /* Login card visual refinements scoped in-page */
+    .login-view {
+      background: radial-gradient(circle at 16% 18%, rgba(219, 234, 254, 0.7), transparent 44%),
+                  radial-gradient(circle at 92% 0%, rgba(191, 219, 254, 0.5), transparent 36%),
+                  linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+    }
+
+    .welcome-panel {
+      background: linear-gradient(155deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      box-shadow: 0 18px 38px -30px rgba(15, 23, 42, 0.5);
+    }
+
+    .welcome-panel::after {
+      background: radial-gradient(circle at 86% 22%, rgba(37, 99, 235, 0.12), transparent 40%),
+                  radial-gradient(circle at 32% 78%, rgba(15, 23, 42, 0.08), transparent 42%);
+    }
+
+    .welcome-eyebrow {
+      color: #1e3a8a;
+    }
+
+    .welcome-eyebrow .material-symbols-rounded {
+      color: #1d4ed8;
+    }
+
+    .welcome-badge {
+      background: rgba(37, 99, 235, 0.1);
+      color: #1e40af;
+    }
+
+    .welcome-badge.success {
+      background: rgba(15, 23, 42, 0.08);
+      color: #1f2937;
+    }
+
+    .feature-pill {
+      background: rgba(255, 255, 255, 0.76);
+      border: 1px solid #dbe3ef;
+    }
+
+    .feature-pill .material-symbols-rounded {
+      color: #2563eb;
+    }
+
     .login-card {
       position: relative;
       background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(252, 253, 255, 0.94));
       border: 1px solid rgba(15, 23, 42, 0.08);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 26px 44px -34px rgba(15, 23, 42, 0.6);
     }
 
     .login-card::after {
@@ -4901,6 +4947,7 @@
 
     .brand-logo {
       width: 118px;
+      filter: drop-shadow(0 10px 16px rgba(37, 99, 235, 0.18));
     }
 
     .login-kicker {
