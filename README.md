@@ -2,7 +2,7 @@
 
 # Best Connect
 
-HR Connect is an all-in-one HR operations platform built with **Node.js**, **Express**, **MongoDB**, and a static front-end served from the same backend.
+Best Connect is an all-in-one HR operations platform built with **Node.js**, **Express**, **MongoDB**, and a static front-end served from the same backend.
 
 It supports employee lifecycle workflows such as:
 
