@@ -1060,6 +1060,7 @@ function adaptSearchResultToCandidate(result) {
 
 document.addEventListener('DOMContentLoaded', () => {
   setupTabGroupMenus();
+  setBrandingImagesLoadingState(true);
   applyOrganizationBranding();
   loadPublicOrganizationBranding();
   loadPublicChatWidgetSettings();
@@ -8307,6 +8308,15 @@ function applyOrganizationBranding() {
   });
 }
 
+function setBrandingImagesLoadingState(isLoading) {
+  const logoIds = ['loginBrandLogo', 'appBrandLogo', 'organizationLogoPreview'];
+  logoIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.visibility = isLoading ? 'hidden' : 'visible';
+  });
+}
+
 
 async function loadPublicOrganizationBranding() {
   try {
@@ -8325,6 +8335,8 @@ async function loadPublicOrganizationBranding() {
   } catch (err) {
     console.error('Unable to load public organization branding', err);
     return organizationSettings;
+  } finally {
+    setBrandingImagesLoadingState(false);
   }
 }
 
