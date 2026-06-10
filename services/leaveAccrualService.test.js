@@ -1,12 +1,27 @@
 const { test } = require('node:test');
 const assert = require('assert');
+const Module = require('module');
+
+const originalLoad = Module._load;
+Module._load = function loadWithMongoStub(request, parent, isMain) {
+  if (request === 'mongodb') {
+    return {
+      MongoClient: class MongoClientStub {
+        connect() { return Promise.resolve(); }
+        db() { return {}; }
+      }
+    };
+  }
+  return originalLoad.apply(this, arguments);
+};
 
 const {
   buildEmployeeLeaveState,
   getCurrentCycleRange,
   normalizeLeaveBalanceEntry,
   roundToOneDecimal,
-  DEFAULT_LEAVE_BALANCES
+  DEFAULT_LEAVE_BALANCES,
+  getNegativeBalanceLimit
 } = require('./leaveAccrualService');
 
 function createEmployee(startDate, endDate) {
@@ -84,14 +99,15 @@ test('Taken leave calculation supports mixed-case leave types', () => {
   assert.equal(balances.annual.balance, 8);
 });
 
-test('Mid-cycle joining only accrues for active months', () => {
+test('Mid-cycle joining prorates from the actual start date', () => {
   const asOfDate = new Date('2025-06-30');
   const employee = createEmployee(new Date('2024-11-15'));
   const balances = runState(employee, [], asOfDate);
 
-  assert.equal(balances.annual.balance, roundToOneDecimal((10 / 12) * 8));
-  assert.equal(balances.casual.balance, roundToOneDecimal((5 / 12) * 8));
-  assert.equal(balances.medical.balance, roundToOneDecimal((14 / 12) * 8));
+  const proratedMonths = (16 / 30) + 7;
+  assert.equal(balances.annual.balance, roundToOneDecimal((10 / 12) * proratedMonths));
+  assert.equal(balances.casual.balance, roundToOneDecimal((5 / 12) * proratedMonths));
+  assert.equal(balances.medical.balance, roundToOneDecimal((14 / 12) * proratedMonths));
 });
 
 test('Mid-cycle departure stops accrual after exit month', () => {
@@ -99,9 +115,10 @@ test('Mid-cycle departure stops accrual after exit month', () => {
   const employee = createEmployee(new Date('2024-07-01'), new Date('2025-01-10'));
   const balances = runState(employee, [], asOfDate);
 
-  assert.equal(balances.annual.balance, roundToOneDecimal((10 / 12) * 7));
-  assert.equal(balances.casual.balance, roundToOneDecimal((5 / 12) * 7));
-  assert.equal(balances.medical.balance, roundToOneDecimal((14 / 12) * 7));
+  const proratedMonths = 6 + (10 / 31);
+  assert.equal(balances.annual.balance, roundToOneDecimal((10 / 12) * proratedMonths));
+  assert.equal(balances.casual.balance, roundToOneDecimal((5 / 12) * proratedMonths));
+  assert.equal(balances.medical.balance, roundToOneDecimal((14 / 12) * proratedMonths));
 });
 
 test('Negative balances are produced when leave exceeds accrual', () => {
@@ -143,4 +160,21 @@ test('Normalization caps stored balances and accrued values at allocations', () 
 
   assert.equal(normalized.balance, defaults.yearlyAllocation);
   assert.equal(normalized.accrued, defaults.yearlyAllocation);
+});
+
+
+test('Six month leave cycles use Jan-Jun and Jul-Dec boundaries', () => {
+  const firstHalf = getCurrentCycleRange(new Date('2026-03-15'), { durationMonths: 6 });
+  assert.equal(firstHalf.start.toISOString().slice(0, 10), '2026-01-01');
+  assert.equal(firstHalf.end.toISOString().slice(0, 10), '2026-06-30');
+
+  const secondHalf = getCurrentCycleRange(new Date('2026-07-01'), { durationMonths: 6 });
+  assert.equal(secondHalf.start.toISOString().slice(0, 10), '2026-07-01');
+  assert.equal(secondHalf.end.toISOString().slice(0, 10), '2026-12-31');
+});
+
+test('Negative balance limits are configured per leave type', () => {
+  assert.equal(getNegativeBalanceLimit('annual'), 2);
+  assert.equal(getNegativeBalanceLimit('medical'), 2);
+  assert.equal(getNegativeBalanceLimit('casual'), 1);
 });

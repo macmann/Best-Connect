@@ -1,4 +1,5 @@
 const { db } = require('../db');
+const { getCurrentCycleRange, getLeaveCycleSettings, roundToOneDecimal } = require('../services/leaveAccrualService');
 
 const DEFAULT_ENTITLEMENTS = {
   annual: 10,
@@ -21,42 +22,56 @@ function startOfDay(date) {
   return copy;
 }
 
-function getCurrentLeaveCycle(dateNow = new Date()) {
-  const now = new Date(dateNow);
-  const year = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
-  const cycleStart = new Date(year, 6, 1);
-  const cycleEnd = new Date(year + 1, 5, 30, 23, 59, 59, 999);
-  const yearLabel = `${year}-${year + 1}`;
-  return { cycleStart, cycleEnd, yearLabel };
+function getCurrentLeaveCycle(dateNow = new Date(), settings = {}) {
+  const cycle = getCurrentCycleRange(dateNow, getLeaveCycleSettings(settings));
+  const yearLabel = cycle.durationMonths === 6
+    ? `${cycle.start.getFullYear()}-${String(cycle.start.getMonth() + 1).padStart(2, '0')}`
+    : `${cycle.start.getFullYear()}-${cycle.end.getFullYear()}`;
+  return {
+    cycleStart: cycle.start,
+    cycleEnd: cycle.end,
+    yearLabel,
+    durationMonths: cycle.durationMonths
+  };
 }
 
-function computeMonthsServedInCycle(employee, dateNow = new Date()) {
-  const { cycleStart } = getCurrentLeaveCycle(dateNow);
-  const now = new Date(dateNow);
+function daysInclusive(start, end) {
+  const startDate = startOfDay(start);
+  const endDate = startOfDay(end);
+  if (!startDate || !endDate || endDate < startDate) return 0;
+  return Math.floor((endDate.getTime() - startDate.getTime()) / 86400000) + 1;
+}
+
+function computeMonthsServedInCycle(employee, dateNow = new Date(), settings = {}) {
+  const { cycleStart, cycleEnd } = getCurrentLeaveCycle(dateNow, settings);
+  const now = startOfDay(new Date(dateNow));
   const primaryStart = toDateOrNull(employee?.internshipStartDate);
   const secondaryStart = toDateOrNull(employee?.fullTimeStartDate);
   const effectiveStartDate = primaryStart || secondaryStart || cycleStart;
   const effectiveStartForCycle = effectiveStartDate > cycleStart ? effectiveStartDate : cycleStart;
+  const accrualEnd = cycleEnd < now ? cycleEnd : now;
+  if (effectiveStartForCycle > accrualEnd) return 0;
 
-  const startMonthAnchor = new Date(
-    effectiveStartForCycle.getFullYear(),
-    effectiveStartForCycle.getMonth(),
-    1
-  );
-  let months =
-    (now.getFullYear() - startMonthAnchor.getFullYear()) * 12 +
-    (now.getMonth() - startMonthAnchor.getMonth()) +
-    1;
+  let monthEquivalents = 0;
+  let cursor = new Date(effectiveStartForCycle.getFullYear(), effectiveStartForCycle.getMonth(), 1);
+  while (cursor <= accrualEnd) {
+    const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+    const activeStart = cursor < effectiveStartForCycle ? effectiveStartForCycle : cursor;
+    const activeEnd = monthEnd > accrualEnd ? accrualEnd : monthEnd;
+    const monthDays = daysInclusive(cursor, monthEnd);
+    const activeDays = daysInclusive(activeStart, activeEnd);
+    if (monthDays > 0 && activeDays > 0) monthEquivalents += activeDays / monthDays;
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
 
-  if (!Number.isFinite(months) || months < 0) months = 0;
-  if (months > 12) months = 12;
-
-  return months;
+  const maxMonths = getLeaveCycleSettings(settings).durationMonths;
+  if (!Number.isFinite(monthEquivalents) || monthEquivalents < 0) return 0;
+  return Math.min(monthEquivalents, maxMonths);
 }
 
 function computeAccruedLeaveBalance({ yearEntitlement, monthsServedInCycle, totalLeaveTaken }) {
-  const earned = yearEntitlement * (monthsServedInCycle / 12);
-  const balance = earned - (totalLeaveTaken || 0);
+  const earned = roundToOneDecimal(yearEntitlement * (monthsServedInCycle / 12));
+  const balance = roundToOneDecimal(earned - (totalLeaveTaken || 0));
   return { earned, balance };
 }
 
@@ -98,8 +113,8 @@ function calculateLeaveDaysWithinRange(app, rangeStart, rangeEnd, holidaySet = n
   return days;
 }
 
-async function computeAllLeaveBalances(employee, { dateNow = new Date(), applications, holidays } = {}) {
-  const { cycleStart, cycleEnd } = getCurrentLeaveCycle(dateNow);
+async function computeAllLeaveBalances(employee, { dateNow = new Date(), applications, holidays, settings } = {}) {
+  const { cycleStart, cycleEnd } = getCurrentLeaveCycle(dateNow, settings);
   const rangeStart = startOfDay(cycleStart);
   const today = startOfDay(dateNow);
   const rangeEnd = today && cycleEnd < today ? cycleEnd : today;
@@ -110,10 +125,13 @@ async function computeAllLeaveBalances(employee, { dateNow = new Date(), applica
     if (!holidays && Array.isArray(db.data?.holidays)) {
       holidays = db.data.holidays;
     }
+    if (!settings && db.data?.settings) {
+      settings = db.data.settings;
+    }
   }
 
   const holidaySet = buildHolidaySet(holidays);
-  const monthsServedInCycle = computeMonthsServedInCycle(employee, dateNow);
+  const monthsServedInCycle = computeMonthsServedInCycle(employee, dateNow, settings);
 
   const totals = { annual: 0, casual: 0, medical: 0 };
   (applications || []).forEach(app => {
@@ -128,7 +146,6 @@ async function computeAllLeaveBalances(employee, { dateNow = new Date(), applica
 
   const balances = {};
   SUPPORTED_LEAVE_TYPES.forEach(type => {
-    const manualBalanceValue = Number(employee?.leaveBalances?.[type]?.balance);
     const overrideValue = Number(employee?.leaveBalances?.[type]?.yearlyAllocation);
     const entitlementValue = Number(employee?.[`${type}LeaveEntitlement`]);
     const yearEntitlement = Number.isFinite(overrideValue)
@@ -142,15 +159,11 @@ async function computeAllLeaveBalances(employee, { dateNow = new Date(), applica
       totalLeaveTaken: totals[type]
     });
 
-    const hasManualBalanceOverride = Number.isFinite(manualBalanceValue);
-    const resolvedBalance = hasManualBalanceOverride ? manualBalanceValue : accruedBalance;
-    const resolvedEarned = hasManualBalanceOverride ? manualBalanceValue + totals[type] : accruedEarned;
-
     balances[type] = {
       entitlement: yearEntitlement,
-      earned: resolvedEarned,
-      taken: totals[type] || 0,
-      balance: resolvedBalance
+      earned: accruedEarned,
+      taken: roundToOneDecimal(totals[type] || 0),
+      balance: accruedBalance
     };
   });
 

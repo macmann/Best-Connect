@@ -4,7 +4,8 @@ const {
   DEFAULT_LEAVE_BALANCES,
   SUPPORTED_LEAVE_TYPES,
   getCurrentCycleRange,
-  cloneDefaultLeaveBalances
+  cloneDefaultLeaveBalances,
+  getLeaveCycleSettings
 } = require('../services/leaveAccrualService');
 
 async function resetLeaveCycle(now = new Date()) {
@@ -16,7 +17,17 @@ async function resetLeaveCycle(now = new Date()) {
   const employees = db.data.employees;
   let updatedCount = 0;
 
-  const cycle = getCurrentCycleRange(now);
+  db.data.settings = db.data.settings && typeof db.data.settings === 'object' ? db.data.settings : {};
+  const settings = getLeaveCycleSettings(db.data.settings);
+  const cycle = getCurrentCycleRange(now, settings);
+  const today = new Date(now);
+  if (
+    today.getFullYear() !== cycle.start.getFullYear() ||
+    today.getMonth() !== cycle.start.getMonth() ||
+    today.getDate() !== cycle.start.getDate()
+  ) {
+    return { processed: employees.length, updated: 0, skipped: true };
+  }
 
   employees.forEach(emp => {
     if (!emp || typeof emp !== 'object') return;
@@ -30,6 +41,7 @@ async function resetLeaveCycle(now = new Date()) {
     balances.cycleStart = cycle.start;
     balances.cycleEnd = cycle.end;
     balances.lastAccrualRun = null;
+    balances.cycleDurationMonths = cycle.durationMonths;
 
     const hasChanges = JSON.stringify(emp.leaveBalances || {}) !== JSON.stringify(balances);
     emp.leaveBalances = balances;
@@ -45,7 +57,7 @@ async function resetLeaveCycle(now = new Date()) {
   return { processed: employees.length, updated: updatedCount };
 }
 
-const resetLeaveCycleJob = cron.schedule('0 1 1 7 *', async () => {
+const resetLeaveCycleJob = cron.schedule('0 1 1 1,7 *', async () => {
   console.log('[CRON] Starting leave cycle reset job');
   try {
     const result = await resetLeaveCycle();
