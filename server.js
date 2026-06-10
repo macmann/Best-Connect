@@ -20,7 +20,13 @@ const {
   roundToOneDecimal,
   recalculateLeaveBalancesForCycle,
   getCurrentCycleRange,
-  buildEmployeeLeaveState
+  buildEmployeeLeaveState,
+  getLeaveCycleSettings,
+  normalizeCycleDurationMonths,
+  DEFAULT_LEAVE_CYCLE_DURATION_MONTHS,
+  SUPPORTED_CYCLE_DURATIONS,
+  NEGATIVE_BALANCE_LIMITS,
+  getNegativeBalanceLimit
 } = require('./services/leaveAccrualService');
 const { parse } = require('csv-parse/sync');
 const {
@@ -1697,7 +1703,8 @@ function ensureLeaveBalances(emp, options = {}) {
   }
 
   let updated = false;
-  const cycle = getCurrentCycleRange(options.now instanceof Date ? options.now : new Date());
+  const settings = getLeaveCycleSettings(options.settings || db.data?.settings || {});
+  const cycle = getCurrentCycleRange(options.now instanceof Date ? options.now : new Date(), settings);
 
   SUPPORTED_LEAVE_TYPES.forEach(type => {
     const defaults = DEFAULT_LEAVE_BALANCES[type];
@@ -1722,6 +1729,10 @@ function ensureLeaveBalances(emp, options = {}) {
     emp.leaveBalances.lastAccrualRun = null;
     updated = true;
   }
+  if (emp.leaveBalances.cycleDurationMonths !== cycle.durationMonths) {
+    emp.leaveBalances.cycleDurationMonths = cycle.durationMonths;
+    updated = true;
+  }
 
   return updated;
 }
@@ -1732,14 +1743,16 @@ function refreshEmployeeLeaveBalances(employee, data, options = {}) {
   }
 
   const asOfDate = options.asOfDate instanceof Date ? options.asOfDate : new Date();
-  const cycleRange = options.cycleRange || getCurrentCycleRange(asOfDate);
+  const settings = getLeaveCycleSettings(options.settings || data?.settings || {});
+  const cycleRange = options.cycleRange || getCurrentCycleRange(asOfDate, settings);
   const applications = Array.isArray(data?.applications) ? data.applications : [];
   const holidays = Array.isArray(data?.holidays) ? data.holidays : [];
 
   const { balances } = buildEmployeeLeaveState(employee, applications, {
     asOfDate,
     cycleRange,
-    holidays
+    holidays,
+    settings
   });
 
   const current = employee.leaveBalances || {};
@@ -1751,8 +1764,8 @@ function refreshEmployeeLeaveBalances(employee, data, options = {}) {
   return { updated: hasChanged, balances: employee.leaveBalances };
 }
 
-function formatLeaveBalancesForResponse(balances, { dateNow = new Date() } = {}) {
-  const cycle = getCurrentLeaveCycleInfo(dateNow);
+function formatLeaveBalancesForResponse(balances, { dateNow = new Date(), settings } = {}) {
+  const cycle = getCurrentLeaveCycleInfo(dateNow, settings);
   const toEntry = (entry = {}, defaultEntitlement = 0) => ({
     entitlement: Number.isFinite(entry?.entitlement) ? entry.entitlement : defaultEntitlement,
     earned: roundToOneDecimal(entry?.earned || 0),
@@ -1766,7 +1779,8 @@ function formatLeaveBalancesForResponse(balances, { dateNow = new Date() } = {})
     medical: toEntry(balances?.medical, DEFAULT_ENTITLEMENTS.medical),
     cycleStart: cycle.cycleStart,
     cycleEnd: cycle.cycleEnd,
-    yearLabel: cycle.yearLabel
+    yearLabel: cycle.yearLabel,
+    cycleDurationMonths: cycle.durationMonths
   };
 }
 
@@ -1776,10 +1790,17 @@ async function getComputedLeaveBalances(employee, options = {}) {
   const balances = await computeAllLeaveBalances(employee, {
     dateNow,
     applications: options.applications || (db.data && db.data.applications),
-    holidays: options.holidays || (db.data && db.data.holidays)
+    holidays: options.holidays || (db.data && db.data.holidays),
+    settings: options.settings || (db.data && db.data.settings)
   });
 
-  return { raw: balances, formatted: formatLeaveBalancesForResponse(balances, { dateNow }) };
+  return {
+    raw: balances,
+    formatted: formatLeaveBalancesForResponse(balances, {
+      dateNow,
+      settings: options.settings || (db.data && db.data.settings)
+    })
+  };
 }
 
 function normalizeBooleanFlag(value, defaultValue = false) {
@@ -3759,7 +3780,8 @@ init().then(async () => {
         const { formatted } = await getComputedLeaveBalances(emp, {
           dateNow,
           applications: db.data.applications,
-          holidays: db.data.holidays
+          holidays: db.data.holidays,
+          settings: db.data.settings
         });
         return { ...emp, leaveBalances: formatted };
       })
@@ -5218,6 +5240,51 @@ init().then(async () => {
     };
   }
 
+  function getLeaveCycleSettingsPayload(stored) {
+    const settings = getLeaveCycleSettings(stored || {});
+    return {
+      durationMonths: settings.durationMonths,
+      supportedDurations: SUPPORTED_CYCLE_DURATIONS,
+      defaultDurationMonths: DEFAULT_LEAVE_CYCLE_DURATION_MONTHS,
+      negativeBalanceLimits: NEGATIVE_BALANCE_LIMITS
+    };
+  }
+
+  // ---- LEAVE SETTINGS ----
+  app.get('/settings/leave', authRequired, managerOnly, async (_req, res) => {
+    try {
+      await db.read();
+      res.json(getLeaveCycleSettingsPayload(db.data.settings?.leaveCycle));
+    } catch (err) {
+      console.error('Failed to load leave settings', err);
+      res.status(500).json({ error: 'Unable to load leave settings.' });
+    }
+  });
+
+  app.put('/settings/leave', authRequired, managerOnly, async (req, res) => {
+    try {
+      const requestedDuration = Number(req.body?.durationMonths);
+      if (!SUPPORTED_CYCLE_DURATIONS.includes(requestedDuration)) {
+        return res.status(400).json({ error: 'Leave cycle must be either 6 or 12 months.' });
+      }
+      const durationMonths = normalizeCycleDurationMonths(requestedDuration);
+
+      await db.read();
+      db.data.settings = db.data.settings && typeof db.data.settings === 'object' ? db.data.settings : {};
+      db.data.settings.leaveCycle = { durationMonths };
+      await db.write();
+
+      const recalculation = await recalculateLeaveBalancesForCycle(new Date());
+      res.json({
+        ...getLeaveCycleSettingsPayload(db.data.settings.leaveCycle),
+        recalculation
+      });
+    } catch (err) {
+      console.error('Failed to save leave settings', err);
+      res.status(500).json({ error: 'Unable to save leave settings.' });
+    }
+  });
+
   // ---- ORGANIZATION SETTINGS ----
   app.get('/public/settings/organization', async (_req, res) => {
     try {
@@ -6361,7 +6428,8 @@ init().then(async () => {
     const { raw: leaveBalances } = await getComputedLeaveBalances(employee, {
       dateNow: new Date(),
       applications: db.data.applications,
-      holidays: db.data.holidays
+      holidays: db.data.holidays,
+      settings: db.data.settings
     });
 
     const normalizedFrom =
@@ -6388,7 +6456,7 @@ init().then(async () => {
     const days = getLeaveDays(newApp);
     const balance = leaveBalances?.[normalizedType]?.balance || 0;
     const validationError = validateLeaveBalance(balance, normalizedType, days, {
-      allowNegative: isManagerRole(currentUser?.role)
+      allowNegative: true
     });
     if (validationError) {
       return { status: 400, error: validationError };
@@ -6447,13 +6515,15 @@ init().then(async () => {
   }
 
   function validateLeaveBalance(balance, leaveType, requestedDays, options = {}) {
-    const { allowNegative = false } = options;
-    if (allowNegative) return null;
-
+    const { allowNegative = true } = options;
     const days = Number.isFinite(requestedDays) ? requestedDays : 0;
     const projected = roundToOneDecimal((Number(balance) || 0) - days);
-    if (projected < 0) {
-      return `Insufficient ${leaveType} balance. Current balance: ${roundToOneDecimal(balance)} days. You cannot apply for more of this leave type until your balance is non-negative.`;
+    const negativeLimit = allowNegative ? getNegativeBalanceLimit(leaveType) : 0;
+    if (projected < -negativeLimit) {
+      const limitText = negativeLimit > 0
+        ? ` You can go negative up to ${negativeLimit} day${negativeLimit === 1 ? '' : 's'} for this leave type.`
+        : '';
+      return `Insufficient ${leaveType} balance. Current balance: ${roundToOneDecimal(balance)} days.${limitText}`;
     }
     return null;
   }
@@ -6659,7 +6729,8 @@ init().then(async () => {
     const { formatted: leaveBalances } = await getComputedLeaveBalances(employee, {
       dateNow: new Date(),
       applications: db.data.applications,
-      holidays: db.data.holidays
+      holidays: db.data.holidays,
+      settings: db.data.settings
     });
 
     const now = new Date();
@@ -6807,7 +6878,8 @@ init().then(async () => {
     const { formatted: leaveBalances } = await getComputedLeaveBalances(employee, {
       dateNow: new Date(),
       applications: db.data.applications,
-      holidays: db.data.holidays
+      holidays: db.data.holidays,
+      settings: db.data.settings
     });
 
     res.json({
@@ -7968,28 +8040,25 @@ init().then(async () => {
     const { raw: leaveBalances } = await getComputedLeaveBalances(employee, {
       dateNow: new Date(),
       applications: db.data.applications,
-      holidays: db.data.holidays
+      holidays: db.data.holidays,
+      settings: db.data.settings
     });
 
     const leaveType = String(app.type || '').toLowerCase();
     const requestedDays = getLeaveDays(app);
     const balance = leaveBalances?.[leaveType]?.balance || 0;
     const validationError = validateLeaveBalance(balance, leaveType, requestedDays, {
-      allowNegative: isManagerRole(req.user?.role)
+      allowNegative: true
     });
     if (validationError) {
       return res.status(400).json({ error: validationError });
     }
 
-    ensureLeaveBalances(employee);
-    const approvedDays = getLeaveDays(app);
-    const current = getLeaveBalanceValue(employee.leaveBalances, app.type);
-    setLeaveBalanceValue(employee.leaveBalances, app.type, current - approvedDays);
-
     db.data.applications[appIdx].status = 'approved';
     db.data.applications[appIdx].approvedBy = approver || '';
     db.data.applications[appIdx].approverRemark = remark || '';
     db.data.applications[appIdx].approvedAt = new Date().toISOString();
+    refreshEmployeeLeaveBalances(employee, db.data);
     await db.write();
 
     const email = getEmpEmail(employee);
@@ -8024,20 +8093,12 @@ init().then(async () => {
     if (app.status !== 'pending' && app.status !== 'approved')
       return res.status(400).json({ error: 'Already actioned' });
 
-    // Credit back balance when rejecting (whether pending or already approved)
-    const empIdx = db.data.employees.findIndex(x => x.id == app.employeeId);
-    if (empIdx >= 0) {
-      const employee = db.data.employees[empIdx];
-      ensureLeaveBalances(employee);
-      const days = getLeaveDays(app);
-      const current = getLeaveBalanceValue(employee.leaveBalances, app.type);
-      setLeaveBalanceValue(employee.leaveBalances, app.type, current + days);
-    }
-
     db.data.applications[appIdx].status = 'rejected';
     db.data.applications[appIdx].approvedBy = approver || '';
     db.data.applications[appIdx].approverRemark = remark || '';
     db.data.applications[appIdx].approvedAt = new Date().toISOString();
+    const employee = db.data.employees.find(x => x.id == app.employeeId);
+    if (employee) refreshEmployeeLeaveBalances(employee, db.data);
     await db.write();
 
     const emp = db.data.employees.find(e => e.id == app.employeeId);
@@ -8080,18 +8141,10 @@ init().then(async () => {
       return res.status(400).json({ error: 'Cannot cancel after leave started' });
     }
 
-    // Credit back balance when cancelling (whether pending or approved)
-    const empIdx = db.data.employees.findIndex(x => x.id == appObjApp.employeeId);
-    if (empIdx >= 0) {
-      const employee = db.data.employees[empIdx];
-      ensureLeaveBalances(employee);
-      const days = getLeaveDays(appObjApp);
-      const current = getLeaveBalanceValue(employee.leaveBalances, appObjApp.type);
-      setLeaveBalanceValue(employee.leaveBalances, appObjApp.type, current + days);
-    }
-
     db.data.applications[appIdx].status = 'cancelled';
     db.data.applications[appIdx].cancelledAt = new Date().toISOString();
+    const employee = db.data.employees.find(x => x.id == appObjApp.employeeId);
+    if (employee) refreshEmployeeLeaveBalances(employee, db.data);
     await db.write();
 
     const emp = db.data.employees.find(e => e.id == appObjApp.employeeId);
@@ -8133,34 +8186,24 @@ init().then(async () => {
       const { raw: leaveBalances } = await getComputedLeaveBalances(employee, {
         dateNow: new Date(),
         applications: db.data.applications,
-        holidays: db.data.holidays
+        holidays: db.data.holidays,
+        settings: db.data.settings
       });
 
       const leaveType = String(app.type || '').toLowerCase();
       const requestedDays = getLeaveDays(app);
       const balance = leaveBalances?.[leaveType]?.balance || 0;
       const validationError = validateLeaveBalance(balance, leaveType, requestedDays, {
-        allowNegative: isManagerRole(req.user?.role)
+        allowNegative: true
       });
       if (validationError) {
         return res.status(400).json({ error: validationError });
       }
 
-      ensureLeaveBalances(employee);
-      const approvedDays = getLeaveDays(app);
-      const current = getLeaveBalanceValue(employee.leaveBalances, app.type);
-      setLeaveBalanceValue(employee.leaveBalances, app.type, current - approvedDays);
-    } else if (normalizedStatus === 'rejected') {
-      // Credit back leave
-      const emp = db.data.employees.find(e => e.id == app.employeeId);
-      if (emp) {
-        ensureLeaveBalances(emp);
-        const days = getLeaveDays(app);
-        const current = getLeaveBalanceValue(emp.leaveBalances, app.type);
-        setLeaveBalanceValue(emp.leaveBalances, app.type, current + days);
-      }
     }
     app.status = normalizedStatus || status;
+    const employee = db.data.employees.find(e => e.id == app.employeeId);
+    if (employee) refreshEmployeeLeaveBalances(employee, db.data);
     await db.write();
     res.json(app);
   });

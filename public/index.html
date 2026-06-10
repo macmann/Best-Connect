@@ -7393,6 +7393,7 @@
         <div class="settings-subtab-list" role="tablist" aria-label="Settings sections">
           <button type="button" class="settings-subtab-button settings-subtab-button--active" data-settings-tab="organization" role="tab" aria-selected="true">Organization</button>
           <button type="button" class="settings-subtab-button" data-settings-tab="holidays" role="tab" aria-selected="false">Holiday Calendar</button>
+          <button type="button" class="settings-subtab-button" data-settings-tab="leaveCycle" role="tab" aria-selected="false">Leave Cycle</button>
           <button type="button" class="settings-subtab-button" data-settings-tab="ai" role="tab" aria-selected="false">AI Configuration</button>
           <button type="button" id="roleAssignmentTab" class="settings-subtab-button hidden" data-settings-tab="roleAssignments" role="tab" aria-selected="false">Role Assignments</button>
           <button type="button" class="settings-subtab-button" data-settings-tab="chatWidget" role="tab" aria-selected="false">Chat Widget</button>
@@ -7470,6 +7471,34 @@
           </form>
           <div id="holidayList" class="holiday-list"></div>
         </div>
+        </div>
+
+        <div class="settings-subtab-panel" data-settings-tab-panel="leaveCycle">
+          <div class="md-card">
+            <div class="card-title">
+              <span class="material-symbols-rounded">event_repeat</span>
+              Leave Cycle
+            </div>
+            <p class="card-subtitle">Choose whether leave accrues on the annual July–June cycle or two 6-month cycles: January–June and July–December.</p>
+            <form id="leaveCycleSettingsForm" class="settings-form">
+              <div class="settings-form__fields settings-form__fields--full">
+                <label class="md-label" for="leaveCycleDuration">Cycle duration</label>
+                <div class="md-input-wrapper">
+                  <span class="material-symbols-rounded">date_range</span>
+                  <select id="leaveCycleDuration" class="md-input" required>
+                    <option value="12">1 year — 1 Jul to 30 Jun</option>
+                    <option value="6">6 months — Jan to Jun, Jul to Dec</option>
+                  </select>
+                </div>
+                <div class="settings-form__help">Changing this setting recalculates leave balances for the active cycle. Negative balance limits remain Annual -2, Casual -1, Medical -2.</div>
+              </div>
+              <button type="submit" class="md-button md-button--filled md-button--small settings-form__submit">
+                <span class="material-symbols-rounded">save</span>
+                Save leave cycle
+              </button>
+            </form>
+            <div id="leaveCycleSettingsStatus" class="settings-status text-muted"></div>
+          </div>
         </div>
 
         <div class="settings-subtab-panel" data-settings-tab-panel="ai">

@@ -35,6 +35,7 @@ const DEFAULT_LEAVE_BALANCE_CONFIG = {
   casual: { yearlyAllocation: 5, monthlyAccrual: 5 / 12 },
   medical: { yearlyAllocation: 14, monthlyAccrual: 14 / 12 }
 };
+const LEAVE_NEGATIVE_LIMITS = { annual: 2, casual: 1, medical: 2 };
 const LOCATION_COLORS = ['#6366f1', '#22c55e', '#06b6d4', '#f97316', '#a855f7', '#f43f5e', '#10b981', '#a3e635'];
 
 function normalizeRole(role) {
@@ -455,10 +456,7 @@ function updateBalanceWarning(balanceMap = {}) {
   const warningText = warningEl.querySelector('p');
   if (warningText) {
     const readableTypes = negativeTypes.map(capitalize).join(', ');
-    const managerOverride = isManagerRole(currentUser)
-      ? ' Managers can proceed but balances will go negative.'
-      : ' Applications for these types are temporarily disabled.';
-    warningText.textContent = `Negative balance for ${readableTypes}.${managerOverride}`;
+    warningText.textContent = `Negative balance for ${readableTypes}. Applications are allowed up to the configured negative limit: Annual -2, Casual -1, Medical -2.`;
   }
   warningEl.classList.remove('hidden');
 }
@@ -476,12 +474,13 @@ function populateLeaveTypeOptions(selectEl, balanceMap = {}) {
   let firstEnabled = '';
   types.forEach(type => {
     const balance = balanceMap[type] ?? 0;
-    const isDisabled = balance < 0 && !isManagerRole(currentUser);
+    const limit = LEAVE_NEGATIVE_LIMITS[type] || 0;
+    const isDisabled = balance <= -limit;
     const opt = document.createElement('option');
     opt.value = type;
     opt.disabled = isDisabled;
     opt.dataset.balance = balance;
-    opt.textContent = `${capitalize(type)} (${balance} days${isDisabled ? ' - unavailable' : ''})`;
+    opt.textContent = `${capitalize(type)} (${balance} days${isDisabled ? ` - limit -${limit}` : ''})`;
     if (!isDisabled && !firstEnabled) firstEnabled = type;
     selectEl.appendChild(opt);
   });
@@ -977,6 +976,9 @@ let organizationSettings = {
 let organizationSettingsLoaded = false;
 let organizationSettingsLoading = null;
 let organizationPendingLogoDataUrl = '';
+let leaveCycleSettings = null;
+let leaveCycleSettingsLoaded = false;
+let leaveCycleSettingsLoading = null;
 let careerPageSettings = null;
 let careerPageSettingsLoaded = false;
 let careerPageSettingsLoading = null;
@@ -5761,6 +5763,7 @@ function loadSettingsSubtabData(name) {
   if (!isManagerRole(currentUser)) return;
   if (name === 'organization') loadOrganizationSettings();
   if (name === 'holidays') loadHolidays();
+  if (name === 'leaveCycle') loadLeaveCycleSettings();
   if (name === 'ai') loadAiSettingsConfig();
   if (name === 'chatWidget') loadChatWidgetSettings();
   if (name === 'postLogin') loadPostLoginSettings();
@@ -8451,6 +8454,100 @@ async function onOrganizationSettingsSubmit(ev) {
   } catch (err) {
     console.error('Failed to save organization settings', err);
     setOrganizationSettingsStatus(err.message || 'Unable to save organization settings.', 'error');
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
+
+function setLeaveCycleSettingsStatus(message, type = 'info') {
+  const statusEl = document.getElementById('leaveCycleSettingsStatus');
+  if (!statusEl) return;
+  statusEl.textContent = message || '';
+  statusEl.classList.remove('settings-status--error', 'settings-status--success');
+  if (!message) {
+    statusEl.classList.add('text-muted');
+    return;
+  }
+  statusEl.classList.remove('text-muted');
+  if (type === 'error') statusEl.classList.add('settings-status--error');
+  if (type === 'success') statusEl.classList.add('settings-status--success');
+}
+
+function renderLeaveCycleSettingsForm() {
+  const select = document.getElementById('leaveCycleDuration');
+  if (select) select.value = String(leaveCycleSettings?.durationMonths || 12);
+}
+
+async function fetchLeaveCycleSettings({ force = false } = {}) {
+  if (!force && leaveCycleSettingsLoaded && !leaveCycleSettingsLoading) return leaveCycleSettings;
+  if (!force && leaveCycleSettingsLoading) return leaveCycleSettingsLoading;
+
+  const request = (async () => {
+    const res = await apiFetch('/settings/leave');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Unable to load leave cycle settings.');
+    return data;
+  })();
+
+  leaveCycleSettingsLoading = request;
+  try {
+    const settings = await request;
+    leaveCycleSettings = settings || {};
+    leaveCycleSettingsLoaded = true;
+    return settings;
+  } finally {
+    leaveCycleSettingsLoading = null;
+  }
+}
+
+async function loadLeaveCycleSettings({ force = false, silent = false } = {}) {
+  if (!currentUser || !isManagerRole(currentUser)) return null;
+  if (!force && leaveCycleSettingsLoaded) {
+    renderLeaveCycleSettingsForm();
+    if (!silent) setLeaveCycleSettingsStatus('Leave cycle settings loaded.');
+    return leaveCycleSettings;
+  }
+  if (!silent) setLeaveCycleSettingsStatus('Loading leave cycle settings...');
+  try {
+    const settings = await fetchLeaveCycleSettings({ force });
+    leaveCycleSettings = settings || {};
+    leaveCycleSettingsLoaded = true;
+    renderLeaveCycleSettingsForm();
+    if (!silent) setLeaveCycleSettingsStatus('Leave cycle settings loaded.');
+    return leaveCycleSettings;
+  } catch (err) {
+    console.error('Unable to load leave cycle settings', err);
+    if (!silent) setLeaveCycleSettingsStatus(err.message || 'Unable to load leave cycle settings.', 'error');
+    return null;
+  }
+}
+
+async function onLeaveCycleSettingsSubmit(ev) {
+  ev.preventDefault();
+  if (!currentUser || !isManagerRole(currentUser)) return;
+  const form = ev.currentTarget;
+  const submitBtn = form?.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
+  setLeaveCycleSettingsStatus('Saving leave cycle settings...');
+  try {
+    const select = document.getElementById('leaveCycleDuration');
+    const payload = { durationMonths: Number(select?.value || 12) };
+    const res = await apiFetch('/settings/leave', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Failed to save leave cycle settings.');
+    leaveCycleSettings = data || payload;
+    leaveCycleSettingsLoaded = true;
+    renderLeaveCycleSettingsForm();
+    setLeaveCycleSettingsStatus('Leave cycle settings saved and balances recalculated.', 'success');
+    if (typeof loadEmployeeSelect === 'function') loadEmployeeSelect();
+  } catch (err) {
+    console.error('Failed to save leave cycle settings', err);
+    setLeaveCycleSettingsStatus(err.message || 'Unable to save leave cycle settings.', 'error');
   } finally {
     if (submitBtn) submitBtn.disabled = false;
   }
@@ -11195,6 +11292,8 @@ async function init() {
 
   const organizationForm = document.getElementById('organizationSettingsForm');
   if (organizationForm) organizationForm.addEventListener('submit', onOrganizationSettingsSubmit);
+  const leaveCycleForm = document.getElementById('leaveCycleSettingsForm');
+  if (leaveCycleForm) leaveCycleForm.addEventListener('submit', onLeaveCycleSettingsSubmit);
   const organizationLogoInput = document.getElementById('organizationLogoFile');
   if (organizationLogoInput) organizationLogoInput.addEventListener('change', onOrganizationLogoFileChange);
 
@@ -11637,7 +11736,7 @@ async function onEmployeeChange() {
   updateBalanceWarning(currentLeaveBalances);
   if (applyBtn) {
     applyBtn.disabled = !hasEnabled;
-    applyBtn.title = hasEnabled ? '' : 'Applications are disabled until balances are non-negative.';
+    applyBtn.title = hasEnabled ? '' : 'Applications are disabled because all leave types reached their negative limits.';
   }
 
   // Show previous leaves
