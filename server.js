@@ -6156,11 +6156,9 @@ init().then(async () => {
 
       if (internSegmentStart <= internSegmentEnd) {
         const internWorkingDays = countWorkingDaysInRange(internSegmentStart, internSegmentEnd);
-        const internMonthlySalary =
-          typeof employee.internshipMonthlySalary === 'number'
-          && Number.isFinite(employee.internshipMonthlySalary)
-            ? employee.internshipMonthlySalary
-            : 300000;
+        const internMonthlySalary = Number.isFinite(employee.internshipMonthlySalary)
+          ? employee.internshipMonthlySalary
+          : 0;
         const internDailyRate = internMonthlySalary / workingDaysInMonth;
         totalPay += internDailyRate * internWorkingDays;
       }
@@ -6178,7 +6176,7 @@ init().then(async () => {
     const isFullTimeThisMonth = fullTimeStartDate && fullTimeStartDate <= activeEnd;
     const monthlySalaryToUse = isFullTimeThisMonth
       ? Number.isFinite(employee.monthlySalary) ? employee.monthlySalary : 0
-      : (Number.isFinite(employee.internshipMonthlySalary) ? employee.internshipMonthlySalary : 300000);
+      : Number.isFinite(employee.internshipMonthlySalary) ? employee.internshipMonthlySalary : 0;
 
     const segmentWorkingDays = countWorkingDaysInRange(activeStart, activeEnd);
     const dailyRate = monthlySalaryToUse / workingDaysInMonth;
@@ -6255,7 +6253,9 @@ init().then(async () => {
           {
             ...dateContext,
             monthlySalary: Number.isFinite(salaryRecord?.amount) ? salaryRecord.amount : 0,
-            internshipMonthlySalary: rawEmployee?.internshipMonthlySalary
+            internshipMonthlySalary: Number.isFinite(salaryRecord?.amount)
+              ? salaryRecord.amount
+              : Number.isFinite(rawEmployee?.internshipMonthlySalary) ? rawEmployee.internshipMonthlySalary : 0
           },
           payrollYear,
           payrollMonthNumber
