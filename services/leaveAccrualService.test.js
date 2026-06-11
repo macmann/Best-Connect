@@ -154,6 +154,25 @@ test('Accrued balances are capped at the yearly allocation', () => {
   assert.equal(balances.medical.balance, 14);
 });
 
+
+test('Manual leave adjustments increase or decrease computed balances', () => {
+  const asOfDate = new Date('2025-06-30');
+  const employee = {
+    ...createEmployee(new Date('2020-01-01')),
+    leaveBalances: {
+      annual: { manualAdjustment: 1.5 },
+      casual: { manualAdjustment: -1 },
+      medical: { manualAdjustment: 0 }
+    }
+  };
+  const balances = runState(employee, [], asOfDate);
+
+  assert.equal(balances.annual.balance, 11.5);
+  assert.equal(balances.annual.manualAdjustment, 1.5);
+  assert.equal(balances.casual.balance, 4);
+  assert.equal(balances.casual.manualAdjustment, -1);
+});
+
 test('Normalization caps stored balances and accrued values at allocations', () => {
   const defaults = DEFAULT_LEAVE_BALANCES.annual;
   const normalized = normalizeLeaveBalanceEntry({ balance: 10.8, accrued: 10.8 }, defaults);
