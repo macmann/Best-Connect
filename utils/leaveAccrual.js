@@ -158,12 +158,16 @@ async function computeAllLeaveBalances(employee, { dateNow = new Date(), applica
       monthsServedInCycle,
       totalLeaveTaken: totals[type]
     });
+    const manualAdjustment = Number(employee?.leaveBalances?.[type]?.manualAdjustment);
+    const adjustment = Number.isFinite(manualAdjustment) ? manualAdjustment : 0;
 
     balances[type] = {
       entitlement: yearEntitlement,
       earned: accruedEarned,
       taken: roundToOneDecimal(totals[type] || 0),
-      balance: accruedBalance
+      adjustment: roundToOneDecimal(adjustment),
+      manualAdjustment: roundToOneDecimal(adjustment),
+      balance: roundToOneDecimal(accruedBalance + adjustment)
     };
   });
 

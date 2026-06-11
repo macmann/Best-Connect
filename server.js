@@ -1622,7 +1622,7 @@ function canViewRequest(requestRecord, currentUser, employees = [], users = []) 
 
 function normalizeLeaveBalanceEntry(entry, defaults) {
   const baseDefaults =
-    defaults || { balance: 0, yearlyAllocation: 0, monthlyAccrual: 0, accrued: 0, taken: 0 };
+    defaults || { balance: 0, yearlyAllocation: 0, monthlyAccrual: 0, accrued: 0, taken: 0, manualAdjustment: 0 };
   const balanceValue = Number(
     typeof entry === 'object' && entry !== null && 'balance' in entry
       ? entry.balance
@@ -1651,6 +1651,12 @@ function normalizeLeaveBalanceEntry(entry, defaults) {
     typeof entry === 'object' && entry !== null && 'taken' in entry ? entry.taken : baseDefaults.taken
   );
 
+  const manualAdjustment = Number(
+    typeof entry === 'object' && entry !== null && 'manualAdjustment' in entry
+      ? entry.manualAdjustment
+      : baseDefaults.manualAdjustment || 0
+  );
+
   const clampToAllocation = value => {
     if (!Number.isFinite(value)) return value;
     return Number.isFinite(yearlyAllocation) ? Math.min(value, yearlyAllocation) : value;
@@ -1669,7 +1675,8 @@ function normalizeLeaveBalanceEntry(entry, defaults) {
     accrued: roundToOneDecimal(
       clampToAllocation(Number.isFinite(accrued) ? accrued : baseDefaults.accrued)
     ),
-    taken: roundToOneDecimal(Number.isFinite(taken) ? taken : baseDefaults.taken)
+    taken: roundToOneDecimal(Number.isFinite(taken) ? taken : baseDefaults.taken),
+    manualAdjustment: roundToOneDecimal(Number.isFinite(manualAdjustment) ? manualAdjustment : 0)
   };
 }
 
@@ -1766,12 +1773,21 @@ function refreshEmployeeLeaveBalances(employee, data, options = {}) {
 
 function formatLeaveBalancesForResponse(balances, { dateNow = new Date(), settings } = {}) {
   const cycle = getCurrentLeaveCycleInfo(dateNow, settings);
-  const toEntry = (entry = {}, defaultEntitlement = 0) => ({
-    entitlement: Number.isFinite(entry?.entitlement) ? entry.entitlement : defaultEntitlement,
-    earned: roundToOneDecimal(entry?.earned || 0),
-    taken: roundToOneDecimal(entry?.taken || 0),
-    balance: roundToOneDecimal(entry?.balance || 0)
-  });
+  const toEntry = (entry = {}, defaultEntitlement = 0) => {
+    const entitlement = Number.isFinite(entry?.entitlement) ? entry.entitlement : defaultEntitlement;
+    const earned = roundToOneDecimal(entry?.earned || entry?.accrued || 0);
+    const adjustment = roundToOneDecimal(entry?.manualAdjustment ?? entry?.adjustment ?? 0);
+    return {
+      entitlement,
+      yearlyAllocation: entitlement,
+      earned,
+      accrued: earned,
+      taken: roundToOneDecimal(entry?.taken || 0),
+      adjustment,
+      manualAdjustment: adjustment,
+      balance: roundToOneDecimal(entry?.balance || 0)
+    };
+  };
 
   return {
     annual: toEntry(balances?.annual, DEFAULT_ENTITLEMENTS.annual),
@@ -4047,6 +4063,55 @@ init().then(async () => {
       await reconcileLearningAssignmentsForEmployees([emp.id]);
     }
     res.json(emp);
+  });
+
+  app.post('/employees/:id/leave-adjustments', authRequired, managerOnly, async (req, res) => {
+    await db.read();
+    const emp = db.data.employees.find(e => e.id == req.params.id);
+    if (!emp) return res.status(404).json({ error: 'Not found' });
+
+    ensureLeaveBalances(emp);
+    const adjustments = req.body && typeof req.body.adjustments === 'object' ? req.body.adjustments : {};
+    const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+    const applied = {};
+
+    SUPPORTED_LEAVE_TYPES.forEach(type => {
+      const delta = Number(adjustments[type]);
+      if (!Number.isFinite(delta) || delta === 0) return;
+      const currentEntry = normalizeLeaveBalanceEntry(emp.leaveBalances[type], DEFAULT_LEAVE_BALANCES[type]);
+      const currentAdjustment = Number(currentEntry.manualAdjustment);
+      const nextAdjustment = roundToOneDecimal((Number.isFinite(currentAdjustment) ? currentAdjustment : 0) + delta);
+      emp.leaveBalances[type] = {
+        ...currentEntry,
+        manualAdjustment: nextAdjustment
+      };
+      applied[type] = roundToOneDecimal(delta);
+    });
+
+    if (!Object.keys(applied).length) {
+      return res.status(400).json({ error: 'Enter at least one leave adjustment.' });
+    }
+
+    emp.leaveAdjustmentHistory = Array.isArray(emp.leaveAdjustmentHistory) ? emp.leaveAdjustmentHistory : [];
+    emp.leaveAdjustmentHistory.push({
+      id: Date.now(),
+      adjustments: applied,
+      note,
+      adjustedBy: req.user?.email || req.user?.username || '',
+      adjustedAt: new Date().toISOString()
+    });
+
+    refreshEmployeeLeaveBalances(emp, db.data);
+    await db.write();
+
+    const { formatted } = await getComputedLeaveBalances(emp, {
+      dateNow: new Date(),
+      applications: db.data.applications,
+      holidays: db.data.holidays,
+      settings: db.data.settings
+    });
+
+    res.json({ ...emp, leaveBalances: formatted });
   });
 
   app.patch('/employees/:id/status', authRequired, managerOnly, async (req, res) => {
@@ -8135,9 +8200,10 @@ init().then(async () => {
       return res.status(400).json({ error: 'Already cancelled/rejected' });
     }
 
-    // Only allow cancel if today is before leave "from" date
+    // Employees may only cancel future leave; managers/admins may also cancel past leave
+    // so incorrectly recorded approved days are credited back during balance refresh.
     const now = new Date();
-    if (new Date(appObjApp.from) <= now) {
+    if (!isManagerRole(req.user.role) && new Date(appObjApp.from) <= now) {
       return res.status(400).json({ error: 'Cannot cancel after leave started' });
     }
 

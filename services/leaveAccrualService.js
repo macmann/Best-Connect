@@ -10,9 +10,9 @@ const NEGATIVE_BALANCE_LIMITS = {
 };
 
 const DEFAULT_LEAVE_BALANCES = {
-  annual: { balance: 0, yearlyAllocation: 10, monthlyAccrual: 10 / 12, accrued: 0, taken: 0 },
-  casual: { balance: 0, yearlyAllocation: 5, monthlyAccrual: 5 / 12, accrued: 0, taken: 0 },
-  medical: { balance: 0, yearlyAllocation: 14, monthlyAccrual: 14 / 12, accrued: 0, taken: 0 },
+  annual: { balance: 0, yearlyAllocation: 10, monthlyAccrual: 10 / 12, accrued: 0, taken: 0, manualAdjustment: 0 },
+  casual: { balance: 0, yearlyAllocation: 5, monthlyAccrual: 5 / 12, accrued: 0, taken: 0, manualAdjustment: 0 },
+  medical: { balance: 0, yearlyAllocation: 14, monthlyAccrual: 14 / 12, accrued: 0, taken: 0, manualAdjustment: 0 },
   cycleStart: null,
   cycleEnd: null,
   lastAccrualRun: null,
@@ -152,7 +152,8 @@ function normalizeLeaveBalanceEntry(entry, defaults) {
     yearlyAllocation: 0,
     monthlyAccrual: 0,
     accrued: 0,
-    taken: 0
+    taken: 0,
+    manualAdjustment: 0
   };
 
   const balance = Number(
@@ -178,6 +179,11 @@ function normalizeLeaveBalanceEntry(entry, defaults) {
       ? entry.taken
       : baseDefaults.taken
   );
+  const manualAdjustment = Number(
+    typeof entry === 'object' && entry !== null && 'manualAdjustment' in entry
+      ? entry.manualAdjustment
+      : baseDefaults.manualAdjustment || 0
+  );
 
   const clampToAllocation = value => {
     if (!Number.isFinite(value)) return value;
@@ -197,7 +203,8 @@ function normalizeLeaveBalanceEntry(entry, defaults) {
     accrued: roundToOneDecimal(
       clampToAllocation(Number.isFinite(accrued) ? accrued : baseDefaults.accrued)
     ),
-    taken: roundToOneDecimal(Number.isFinite(taken) ? taken : baseDefaults.taken)
+    taken: roundToOneDecimal(Number.isFinite(taken) ? taken : baseDefaults.taken),
+    manualAdjustment: roundToOneDecimal(Number.isFinite(manualAdjustment) ? manualAdjustment : 0)
   };
 }
 
@@ -420,14 +427,17 @@ function buildEmployeeLeaveState(employee, applications, options = {}) {
     const accruedValue = accrued[type] || 0;
     const takenValue = taken[type] || 0;
     const cappedAccrued = Math.min(accruedValue, entitlement);
-    const balance = roundToOneDecimal(cappedAccrued - takenValue);
+    const adjustment = Number(employee?.leaveBalances?.[type]?.manualAdjustment);
+    const manualAdjustment = Number.isFinite(adjustment) ? adjustment : 0;
+    const balance = roundToOneDecimal(cappedAccrued - takenValue + manualAdjustment);
     balances[type] = {
       ...normalizeLeaveBalanceEntry(employee?.leaveBalances?.[type], overriddenDefaults),
       monthlyAccrual,
       yearlyAllocation: entitlement,
       accrued: roundToOneDecimal(cappedAccrued),
       taken: roundToOneDecimal(takenValue),
-      balance
+      balance,
+      manualAdjustment: roundToOneDecimal(manualAdjustment)
     };
   });
 

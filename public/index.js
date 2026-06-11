@@ -169,10 +169,15 @@ function normalizeLeaveEntry(entry, type) {
   if (entry && typeof entry === 'object') {
     return {
       balance: Number.isFinite(entry.balance) ? entry.balance : 0,
-      yearlyAllocation: Number.isFinite(entry.yearlyAllocation) ? entry.yearlyAllocation : defaults.yearlyAllocation,
+      yearlyAllocation: Number.isFinite(entry.yearlyAllocation)
+        ? entry.yearlyAllocation
+        : Number.isFinite(entry.entitlement) ? entry.entitlement : defaults.yearlyAllocation,
       monthlyAccrual: Number.isFinite(entry.monthlyAccrual) ? entry.monthlyAccrual : defaults.monthlyAccrual,
       taken: Number.isFinite(entry.taken) ? entry.taken : 0,
-      accrued: Number.isFinite(entry.accrued) ? entry.accrued : null
+      accrued: Number.isFinite(entry.accrued) ? entry.accrued : Number.isFinite(entry.earned) ? entry.earned : null,
+      manualAdjustment: Number.isFinite(entry.manualAdjustment)
+        ? entry.manualAdjustment
+        : Number.isFinite(entry.adjustment) ? entry.adjustment : 0
     };
   }
   const numericBalance = Number(entry);
@@ -181,7 +186,8 @@ function normalizeLeaveEntry(entry, type) {
     yearlyAllocation: defaults.yearlyAllocation,
     monthlyAccrual: defaults.monthlyAccrual,
     taken: 0,
-    accrued: null
+    accrued: null,
+    manualAdjustment: 0
   };
 }
 
@@ -241,49 +247,49 @@ function renderLeaveUpdateList() {
       const typeLabel = `${capitalize(type)} Leave`;
       const takenValue = roundToOneDecimal(entry.taken);
       const balanceValue = roundToOneDecimal(entry.balance);
-      const takenLabel = `${takenValue.toFixed(1)} days taken`;
-      const balanceOverrideId = `leave-balance-override-${empId}-${type}`;
-      const takenId = `leave-taken-${empId}-${type}`;
-      const projectedEntitlementId = `leave-projected-entitlement-${empId}-${type}`;
-      const projectedEntitlementValue = roundToOneDecimal(balanceValue + takenValue);
+      const adjustmentValue = roundToOneDecimal(entry.manualAdjustment);
+      const takenLabel = `${takenValue.toFixed(1)} days taken • ${adjustmentValue.toFixed(1)} adjusted`;
+      const currentBalanceId = `leave-current-balance-${empId}-${type}`;
+      const adjustmentId = `leave-adjustment-${empId}-${type}`;
+      const projectedBalanceId = `leave-projected-balance-${empId}-${type}`;
       return `
-        <div class="leave-update-row" data-leave-type="${escapeHtml(type)}" data-leave-taken="${escapeHtml(takenValue.toString())}">
+        <div class="leave-update-row" data-leave-type="${escapeHtml(type)}" data-current-balance="${escapeHtml(balanceValue.toString())}">
           <div class="leave-update-row__label">
             <span>${escapeHtml(typeLabel)}</span>
             <small>${escapeHtml(takenLabel)}</small>
           </div>
           <div class="leave-update-row__field">
-            <label for="${escapeHtml(balanceOverrideId)}">Current balance (override)</label>
+            <label for="${escapeHtml(currentBalanceId)}">Current balance</label>
             <input
-              id="${escapeHtml(balanceOverrideId)}"
+              id="${escapeHtml(currentBalanceId)}"
               class="md-input"
               type="number"
               step="0.5"
               value="${escapeHtml(balanceValue.toFixed(1))}"
-              data-leave-field="balance-override"
-            >
-          </div>
-          <div class="leave-update-row__field">
-            <label for="${escapeHtml(takenId)}">Leave taken</label>
-            <input
-              id="${escapeHtml(takenId)}"
-              class="md-input"
-              type="number"
-              step="0.5"
-              value="${escapeHtml(takenValue.toFixed(1))}"
-              data-leave-field="taken"
+              data-leave-field="current-balance"
               readonly
             >
           </div>
           <div class="leave-update-row__field">
-            <label for="${escapeHtml(projectedEntitlementId)}">Entitlement (auto-adjusted)</label>
+            <label for="${escapeHtml(adjustmentId)}">Add / remove days</label>
             <input
-              id="${escapeHtml(projectedEntitlementId)}"
+              id="${escapeHtml(adjustmentId)}"
               class="md-input"
               type="number"
               step="0.5"
-              value="${escapeHtml(projectedEntitlementValue.toFixed(1))}"
-              data-leave-field="entitlement"
+              value="0.0"
+              data-leave-field="adjustment"
+            >
+          </div>
+          <div class="leave-update-row__field">
+            <label for="${escapeHtml(projectedBalanceId)}">Projected balance</label>
+            <input
+              id="${escapeHtml(projectedBalanceId)}"
+              class="md-input"
+              type="number"
+              step="0.5"
+              value="${escapeHtml(balanceValue.toFixed(1))}"
+              data-leave-field="projected-balance"
               readonly
             >
           </div>
@@ -303,7 +309,7 @@ function renderLeaveUpdateList() {
         <div class="leave-update-card__actions">
           <button class="md-button md-button--filled md-button--small" data-leave-save="${escapeHtml(String(empId))}">
             <span class="material-symbols-rounded">save</span>
-            Update Leave
+            Adjust Leave
           </button>
         </div>
       </article>
@@ -361,16 +367,16 @@ function closeLeaveUpdateModal() {
 
 function updateLeaveUpdateRowBalance(row) {
   if (!row) return;
-  const balanceOverrideInput = row.querySelector('[data-leave-field="balance-override"]');
-  const entitlementInput = row.querySelector('[data-leave-field="entitlement"]');
-  if (!balanceOverrideInput || !entitlementInput) return;
-  const balanceOverrideValue = Number(balanceOverrideInput.value);
-  const takenValue = Number(row.dataset.leaveTaken);
-  if (!Number.isFinite(balanceOverrideValue)) return;
-  const projectedEntitlement = roundToOneDecimal(
-    balanceOverrideValue + (Number.isFinite(takenValue) ? takenValue : 0)
+  const adjustmentInput = row.querySelector('[data-leave-field="adjustment"]');
+  const projectedInput = row.querySelector('[data-leave-field="projected-balance"]');
+  if (!adjustmentInput || !projectedInput) return;
+  const adjustmentValue = Number(adjustmentInput.value);
+  const currentBalance = Number(row.dataset.currentBalance);
+  const projectedBalance = roundToOneDecimal(
+    (Number.isFinite(currentBalance) ? currentBalance : 0) +
+    (Number.isFinite(adjustmentValue) ? adjustmentValue : 0)
   );
-  entitlementInput.value = projectedEntitlement.toFixed(1);
+  projectedInput.value = projectedBalance.toFixed(1);
 }
 
 async function saveLeaveUpdatesForEmployee(employeeId, buttonEl) {
@@ -379,32 +385,28 @@ async function saveLeaveUpdatesForEmployee(employeeId, buttonEl) {
   if (!employee) return;
   const card = buttonEl instanceof HTMLElement ? buttonEl.closest('.leave-update-card') : null;
   if (!card) return;
-  const updatedBalances = { ...(employee.leaveBalances || {}) };
+  const adjustments = {};
 
   SUPPORTED_LEAVE_TYPES.forEach(type => {
     const row = card.querySelector(`[data-leave-type="${type}"]`);
-    const balanceOverrideInput = row?.querySelector('[data-leave-field="balance-override"]');
-    const balanceOverrideValue = balanceOverrideInput ? Number(balanceOverrideInput.value) : NaN;
-    const currentEntry = normalizeLeaveEntry(updatedBalances[type], type);
-    const updatedBalance = Number.isFinite(balanceOverrideValue)
-      ? roundToOneDecimal(balanceOverrideValue)
-      : currentEntry.balance;
-    const updatedEntitlement = roundToOneDecimal(updatedBalance + currentEntry.taken);
-    updatedBalances[type] = {
-      ...currentEntry,
-      yearlyAllocation: updatedEntitlement,
-      monthlyAccrual: currentEntry.monthlyAccrual,
-      balance: updatedBalance,
-      accrued: updatedEntitlement
-    };
+    const adjustmentInput = row?.querySelector('[data-leave-field="adjustment"]');
+    const adjustmentValue = adjustmentInput ? Number(adjustmentInput.value) : NaN;
+    if (Number.isFinite(adjustmentValue) && adjustmentValue !== 0) {
+      adjustments[type] = roundToOneDecimal(adjustmentValue);
+    }
   });
+
+  if (!Object.keys(adjustments).length) {
+    showToast('Enter at least one positive or negative adjustment.', 'warning');
+    return;
+  }
 
   setButtonLoading(buttonEl, true);
   try {
-    const res = await apiFetch(`/employees/${employeeId}`, {
-      method: 'PUT',
+    const res = await apiFetch(`/employees/${employeeId}/leave-adjustments`, {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ leaveBalances: updatedBalances })
+      body: JSON.stringify({ adjustments })
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
@@ -416,7 +418,7 @@ async function saveLeaveUpdatesForEmployee(employeeId, buttonEl) {
         String(emp.id) === String(employeeId) ? updatedEmployee : emp
       );
     }
-    showToast('Leave balances updated.', 'success');
+    showToast('Leave adjustments applied.', 'success');
     renderLeaveUpdateList();
     await loadEmployeesManage();
     await loadEmployeesPortal();
@@ -425,7 +427,7 @@ async function saveLeaveUpdatesForEmployee(employeeId, buttonEl) {
     }
   } catch (err) {
     console.error('Failed to update leave balances', err);
-    showToast(err.message || 'Unable to update leave balances.', 'error');
+    showToast(err.message || 'Unable to adjust leave balances.', 'error');
   } finally {
     setButtonLoading(buttonEl, false);
   }
@@ -11493,7 +11495,7 @@ async function init() {
       saveLeaveUpdatesForEmployee(employeeId, button);
     });
     leaveUpdateList.addEventListener('input', event => {
-      const input = event.target.closest('[data-leave-field="balance-override"]');
+      const input = event.target.closest('[data-leave-field="adjustment"]');
       if (!input) return;
       const row = input.closest('.leave-update-row');
       updateLeaveUpdateRowBalance(row);
@@ -11920,9 +11922,7 @@ async function loadManagerApplications() {
       if (app.halfDay) {
         typeLabel += ` (Half Day${app.halfDayPeriod ? ' ' + app.halfDayPeriod : ''})`;
       }
-      // Calculate cancel eligibility: current date before "from" date
-      const now = new Date();
-      const canCancel = new Date(app.from) > now;
+      const canCancel = isManagerRole(currentUser) || new Date(app.from) > new Date();
       return `
         <article class="list-card">
           <div class="list-card__main">
@@ -12018,18 +12018,20 @@ async function loadManagerUpcomingLeaves(showCancel = false) {
   const oneMonthLater = new Date();
   oneMonthLater.setMonth(now.getMonth() + 1);
 
-  const filtered = allApproved.filter(app => {
-    const from = new Date(app.from);
-    const to = new Date(app.to);
-    return (
-      (from >= now && from <= oneMonthLater) ||
-      (to >= now && to <= oneMonthLater) ||
-      (from <= now && to >= now)
-    );
-  });
+  const filtered = showCancel
+    ? allApproved
+    : allApproved.filter(app => {
+      const from = new Date(app.from);
+      const to = new Date(app.to);
+      return (
+        (from >= now && from <= oneMonthLater) ||
+        (to >= now && to <= oneMonthLater) ||
+        (from <= now && to >= now)
+      );
+    });
 
   if (!filtered.length) {
-    list.innerHTML = `<div class="text-muted" style="font-style:italic;">No upcoming approved leaves in the next 1 month.</div>`;
+    list.innerHTML = `<div class="text-muted" style="font-style:italic;">${showCancel ? 'No approved leaves available to cancel.' : 'No upcoming approved leaves in the next 1 month.'}</div>`;
     return;
   }
 
@@ -12043,8 +12045,7 @@ async function loadManagerUpcomingLeaves(showCancel = false) {
     if (app.halfDay) {
       typeLabel += ` (Half Day${app.halfDayPeriod ? ' ' + app.halfDayPeriod : ''})`;
     }
-    // Show cancel if approved leave in future
-    const canCancel = new Date(app.from) > now;
+    const canCancel = showCancel ? isManagerRole(currentUser) : new Date(app.from) > now;
     const icon = typeIcon[app.type] || 'event_available';
     return `
       <article class="list-card">
