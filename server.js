@@ -5326,6 +5326,80 @@ init().then(async () => {
     }
   });
 
+
+  function escapeXml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+
+  function excelCell(value, type = 'String') {
+    const safeType = type === 'Number' ? 'Number' : 'String';
+    const safeValue = safeType === 'Number' && Number.isFinite(Number(value)) ? Number(value) : escapeXml(value);
+    return `<Cell><Data ss:Type="${safeType}">${safeValue}</Data></Cell>`;
+  }
+
+  function excelRow(values) {
+    return `<Row>${values.map(value => {
+      if (value && typeof value === 'object' && 'value' in value) return excelCell(value.value, value.type);
+      return excelCell(value);
+    }).join('')}</Row>`;
+  }
+
+  function normalizeResetLeavePayload(body = {}) {
+    const startDate = new Date(body.startDate);
+    const endDate = new Date(body.endDate);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+      return { error: 'Valid start and end dates are required.' };
+    }
+    if (endDate < startDate) return { error: 'End date cannot be before start date.' };
+    const defaults = body.defaults && typeof body.defaults === 'object' ? body.defaults : {};
+    const normalizedDefaults = {};
+    for (const type of SUPPORTED_LEAVE_TYPES) {
+      const value = Number(defaults[type]);
+      if (!Number.isFinite(value) || value < 0) {
+        return { error: `Enter a valid ${type} leave amount.` };
+      }
+      normalizedDefaults[type] = Math.round(value * 10) / 10;
+    }
+    startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
+    return { startDate, endDate, defaults: normalizedDefaults };
+  }
+
+  function buildLeaveResetWorkbook(employees = [], applications = [], startDate = null, endDate = null) {
+    const approvedApps = applications.filter(app => app && app.status === 'approved');
+    const summaryRows = [excelRow(['Employee ID', 'Name', 'Title', 'Location', 'Annual Balance', 'Annual Taken', 'Casual Balance', 'Casual Taken', 'Medical Balance', 'Medical Taken', 'Cycle Start', 'Cycle End'])];
+    employees.forEach(emp => {
+      const balances = emp.leaveBalances || {};
+      summaryRows.push(excelRow([
+        emp.id || '', emp.name || '', emp.Title || emp.title || '', emp['Country / City'] || emp.location || '',
+        { value: balances.annual?.balance || 0, type: 'Number' }, { value: balances.annual?.taken || 0, type: 'Number' },
+        { value: balances.casual?.balance || 0, type: 'Number' }, { value: balances.casual?.taken || 0, type: 'Number' },
+        { value: balances.medical?.balance || 0, type: 'Number' }, { value: balances.medical?.taken || 0, type: 'Number' },
+        balances.cycleStart ? new Date(balances.cycleStart).toISOString().slice(0, 10) : '',
+        balances.cycleEnd ? new Date(balances.cycleEnd).toISOString().slice(0, 10) : ''
+      ]));
+    });
+    const historyRows = [excelRow(['Employee ID', 'Name', 'Leave Type', 'From', 'To', 'Days', 'Reason', 'Approved By', 'Approved At'])];
+    approvedApps.forEach(app => {
+      const from = new Date(app.from);
+      const to = new Date(app.to);
+      if (startDate && to < startDate) return;
+      if (endDate && from > endDate) return;
+      const emp = employees.find(e => e.id == app.employeeId) || {};
+      historyRows.push(excelRow([
+        app.employeeId || '', emp.name || '', app.type || '', app.from || '', app.to || '',
+        { value: getLeaveDaysInRange(app, startDate, endDate) || getLeaveDays(app), type: 'Number' },
+        app.reason || '', app.approvedBy || '', app.approvedAt || ''
+      ]));
+    });
+    return `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Current Balances"><Table>${summaryRows.join('')}</Table></Worksheet><Worksheet ss:Name="Leave History"><Table>${historyRows.join('')}</Table></Worksheet></Workbook>`;
+  }
+
   app.put('/settings/leave', authRequired, managerOnly, async (req, res) => {
     try {
       const requestedDuration = Number(req.body?.durationMonths);
@@ -5347,6 +5421,62 @@ init().then(async () => {
     } catch (err) {
       console.error('Failed to save leave settings', err);
       res.status(500).json({ error: 'Unable to save leave settings.' });
+    }
+  });
+
+
+
+  app.get('/settings/leave/reset/export.xls', authRequired, managerOnly, async (req, res) => {
+    try {
+      await db.read();
+      const requestedStartDate = req.query.startDate ? new Date(req.query.startDate) : null;
+      const requestedEndDate = req.query.endDate ? new Date(req.query.endDate) : null;
+      const startDate = requestedStartDate && !Number.isNaN(requestedStartDate.getTime()) ? requestedStartDate : null;
+      const endDate = requestedEndDate && !Number.isNaN(requestedEndDate.getTime()) ? requestedEndDate : null;
+      const workbook = buildLeaveResetWorkbook(db.data.employees || [], db.data.applications || [], startDate, endDate);
+      res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="leave-status-before-reset-${new Date().toISOString().slice(0, 10)}.xls"`);
+      res.send(workbook);
+    } catch (err) {
+      console.error('Failed to export leave reset workbook', err);
+      res.status(500).send('Unable to export leave status.');
+    }
+  });
+
+  app.post('/settings/leave/reset', authRequired, managerOnly, async (req, res) => {
+    try {
+      const parsed = normalizeResetLeavePayload(req.body || {});
+      if (parsed.error) return res.status(400).json({ error: parsed.error });
+      await db.read();
+      db.data.employees = Array.isArray(db.data.employees) ? db.data.employees : [];
+      let updated = 0;
+      db.data.employees.forEach(emp => {
+        const balances = cloneDefaultLeaveBalances();
+        SUPPORTED_LEAVE_TYPES.forEach(type => {
+          const allocation = parsed.defaults[type];
+          balances[type] = {
+            ...DEFAULT_LEAVE_BALANCES[type],
+            yearlyAllocation: allocation,
+            monthlyAccrual: allocation / 12,
+            accrued: allocation,
+            taken: 0,
+            balance: allocation,
+            manualAdjustment: 0
+          };
+        });
+        balances.cycleStart = parsed.startDate;
+        balances.cycleEnd = parsed.endDate;
+        balances.lastAccrualRun = null;
+        balances.cycleDurationMonths = Math.max(1, Math.round((parsed.endDate - parsed.startDate) / (1000 * 60 * 60 * 24 * 30)));
+        const changed = JSON.stringify(emp.leaveBalances || {}) !== JSON.stringify(balances);
+        emp.leaveBalances = balances;
+        if (changed) updated += 1;
+      });
+      await db.write();
+      res.json({ processed: db.data.employees.length, updated, startDate: parsed.startDate, endDate: parsed.endDate, defaults: parsed.defaults });
+    } catch (err) {
+      console.error('Failed to reset leave balances', err);
+      res.status(500).json({ error: 'Unable to reset leave balances.' });
     }
   });
 

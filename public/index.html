@@ -7394,6 +7394,7 @@
           <button type="button" class="settings-subtab-button settings-subtab-button--active" data-settings-tab="organization" role="tab" aria-selected="true">Organization</button>
           <button type="button" class="settings-subtab-button" data-settings-tab="holidays" role="tab" aria-selected="false">Holiday Calendar</button>
           <button type="button" class="settings-subtab-button" data-settings-tab="leaveCycle" role="tab" aria-selected="false">Leave Cycle</button>
+          <button type="button" class="settings-subtab-button" data-settings-tab="resetLeave" role="tab" aria-selected="false">Rest</button>
           <button type="button" class="settings-subtab-button" data-settings-tab="ai" role="tab" aria-selected="false">AI Configuration</button>
           <button type="button" id="roleAssignmentTab" class="settings-subtab-button hidden" data-settings-tab="roleAssignments" role="tab" aria-selected="false">Role Assignments</button>
           <button type="button" class="settings-subtab-button" data-settings-tab="chatWidget" role="tab" aria-selected="false">Chat Widget</button>
@@ -7498,6 +7499,63 @@
               </button>
             </form>
             <div id="leaveCycleSettingsStatus" class="settings-status text-muted"></div>
+          </div>
+        </div>
+
+
+
+        <div class="settings-subtab-panel" data-settings-tab-panel="resetLeave">
+          <div class="md-card">
+            <div class="card-title">
+              <span class="material-symbols-rounded">restart_alt</span>
+              Reset Leave for New Round
+            </div>
+            <p class="card-subtitle">Export the current leave status, then reset every employee for a new leave period with the default leave amounts below.</p>
+            <form id="resetLeaveSettingsForm" class="settings-form">
+              <div class="settings-form__fields">
+                <label class="md-label" for="resetLeaveStartDate">Start date</label>
+                <div class="md-input-wrapper">
+                  <span class="material-symbols-rounded">event</span>
+                  <input id="resetLeaveStartDate" class="md-input" type="date" required>
+                </div>
+              </div>
+              <div class="settings-form__fields">
+                <label class="md-label" for="resetLeaveEndDate">End date</label>
+                <div class="md-input-wrapper">
+                  <span class="material-symbols-rounded">event_available</span>
+                  <input id="resetLeaveEndDate" class="md-input" type="date" required>
+                </div>
+              </div>
+              <div class="settings-form__fields">
+                <label class="md-label" for="resetLeaveAnnualDefault">Annual leave for this period</label>
+                <div class="md-input-wrapper">
+                  <span class="material-symbols-rounded">beach_access</span>
+                  <input id="resetLeaveAnnualDefault" class="md-input" type="number" min="0" step="0.5" value="12" required>
+                </div>
+              </div>
+              <div class="settings-form__fields">
+                <label class="md-label" for="resetLeaveCasualDefault">Casual leave for this period</label>
+                <div class="md-input-wrapper">
+                  <span class="material-symbols-rounded">event_note</span>
+                  <input id="resetLeaveCasualDefault" class="md-input" type="number" min="0" step="0.5" value="6" required>
+                </div>
+              </div>
+              <div class="settings-form__fields">
+                <label class="md-label" for="resetLeaveMedicalDefault">Medical leave for this period</label>
+                <div class="md-input-wrapper">
+                  <span class="material-symbols-rounded">medical_services</span>
+                  <input id="resetLeaveMedicalDefault" class="md-input" type="number" min="0" step="0.5" value="12" required>
+                </div>
+              </div>
+              <div class="settings-form__fields settings-form__fields--full">
+                <div class="settings-form__help">Before resetting, a confirmation will offer an Excel download with each employee’s current balances and approved leave date history.</div>
+              </div>
+              <button type="submit" class="md-button md-button--filled md-button--small settings-form__submit">
+                <span class="material-symbols-rounded">restart_alt</span>
+                Reset leave balances
+              </button>
+            </form>
+            <div id="resetLeaveSettingsStatus" class="settings-status text-muted"></div>
           </div>
         </div>
 
