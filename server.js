@@ -5309,6 +5309,8 @@ init().then(async () => {
     const settings = getLeaveCycleSettings(stored || {});
     return {
       durationMonths: settings.durationMonths,
+      activeCycleStart: settings.activeCycleStart,
+      activeCycleEnd: settings.activeCycleEnd,
       supportedDurations: SUPPORTED_CYCLE_DURATIONS,
       defaultDurationMonths: DEFAULT_LEAVE_CYCLE_DURATION_MONTHS,
       negativeBalanceLimits: NEGATIVE_BALANCE_LIMITS
@@ -5410,7 +5412,13 @@ init().then(async () => {
 
       await db.read();
       db.data.settings = db.data.settings && typeof db.data.settings === 'object' ? db.data.settings : {};
-      db.data.settings.leaveCycle = { durationMonths };
+      const previousLeaveCycle = db.data.settings.leaveCycle && typeof db.data.settings.leaveCycle === 'object'
+        ? db.data.settings.leaveCycle
+        : {};
+      db.data.settings.leaveCycle = {
+        ...previousLeaveCycle,
+        durationMonths
+      };
       await db.write();
 
       const recalculation = await recalculateLeaveBalancesForCycle(new Date());
@@ -5448,6 +5456,21 @@ init().then(async () => {
       const parsed = normalizeResetLeavePayload(req.body || {});
       if (parsed.error) return res.status(400).json({ error: parsed.error });
       await db.read();
+      db.data.settings = db.data.settings && typeof db.data.settings === 'object' ? db.data.settings : {};
+      const previousLeaveCycle = db.data.settings.leaveCycle && typeof db.data.settings.leaveCycle === 'object'
+        ? db.data.settings.leaveCycle
+        : {};
+      const cycleDurationMonths = Math.max(1, Math.round(
+        (parsed.endDate.getFullYear() - parsed.startDate.getFullYear()) * 12 +
+        (parsed.endDate.getMonth() - parsed.startDate.getMonth()) + 1
+      ));
+      db.data.settings.leaveCycle = {
+        ...previousLeaveCycle,
+        durationMonths: normalizeCycleDurationMonths(cycleDurationMonths),
+        activeCycleStart: parsed.startDate,
+        activeCycleEnd: parsed.endDate,
+        lastManualResetAt: new Date().toISOString()
+      };
       db.data.employees = Array.isArray(db.data.employees) ? db.data.employees : [];
       let updated = 0;
       db.data.employees.forEach(emp => {
@@ -5458,22 +5481,22 @@ init().then(async () => {
             ...DEFAULT_LEAVE_BALANCES[type],
             yearlyAllocation: allocation,
             monthlyAccrual: allocation / 12,
-            accrued: allocation,
+            accrued: 0,
             taken: 0,
-            balance: allocation,
+            balance: 0,
             manualAdjustment: 0
           };
         });
         balances.cycleStart = parsed.startDate;
         balances.cycleEnd = parsed.endDate;
         balances.lastAccrualRun = null;
-        balances.cycleDurationMonths = Math.max(1, Math.round((parsed.endDate - parsed.startDate) / (1000 * 60 * 60 * 24 * 30)));
+        balances.cycleDurationMonths = cycleDurationMonths;
         const changed = JSON.stringify(emp.leaveBalances || {}) !== JSON.stringify(balances);
         emp.leaveBalances = balances;
         if (changed) updated += 1;
       });
       await db.write();
-      res.json({ processed: db.data.employees.length, updated, startDate: parsed.startDate, endDate: parsed.endDate, defaults: parsed.defaults });
+      res.json({ processed: db.data.employees.length, updated, startDate: parsed.startDate, endDate: parsed.endDate, defaults: parsed.defaults, cycleDurationMonths });
     } catch (err) {
       console.error('Failed to reset leave balances', err);
       res.status(500).json({ error: 'Unable to reset leave balances.' });
@@ -5984,12 +6007,18 @@ init().then(async () => {
     res.json({ success: true });
   });
 
+  function getActiveLeaveReportRange(settings = {}) {
+    const cycle = getCurrentCycleRange(new Date(), getLeaveCycleSettings(settings));
+    return { startDate: cycle.start, endDate: cycle.end };
+  }
+
   // ---- LEAVE REPORT ----
   app.get('/leave-report', authRequired, managerOnly, async (req, res) => {
     await db.read();
     const { start, end } = req.query;
-    const startDate = start ? new Date(start) : null;
-    const endDate = end ? new Date(end) : null;
+    const activeRange = getActiveLeaveReportRange(db.data.settings || {});
+    const startDate = start ? new Date(start) : activeRange.startDate;
+    const endDate = end ? new Date(end) : activeRange.endDate;
     const emps = db.data.employees || [];
     const apps = db.data.applications || [];
 
@@ -6030,7 +6059,15 @@ init().then(async () => {
   app.get('/leave-report/export', authRequired, managerOnly, async (req, res) => {
     await db.read();
     const emps = db.data.employees || [];
-    const apps = (db.data.applications || []).filter(a => a.status === 'approved');
+    const activeRange = getActiveLeaveReportRange(db.data.settings || {});
+    const apps = (db.data.applications || []).filter(a => {
+      if (!a || a.status !== 'approved') return false;
+      const from = new Date(a.from);
+      const to = new Date(a.to);
+      if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return false;
+      if (to < activeRange.startDate || from > activeRange.endDate) return false;
+      return true;
+    });
 
     function escapeCsv(value) {
       if (!value) return '';
@@ -6042,10 +6079,13 @@ init().then(async () => {
     for (const app of apps) {
       const emp = emps.find(e => e.id == app.employeeId) || {};
       const name = emp.name || '';
-      const start = new Date(app.from);
-      const end = new Date(app.to);
+      const appStart = new Date(app.from);
+      const appEnd = new Date(app.to);
+      const start = appStart < activeRange.startDate ? new Date(activeRange.startDate) : appStart;
+      const end = appEnd > activeRange.endDate ? new Date(activeRange.endDate) : appEnd;
       if (app.halfDay) {
-        const dateStr = start.toISOString().split('T')[0];
+        if (appStart < activeRange.startDate || appStart > activeRange.endDate) continue;
+        const dateStr = appStart.toISOString().split('T')[0];
         const period = app.halfDayType || app.halfDayPeriod || '';
         const type = `${app.type} (Half Day${period ? ' ' + period : ''})`;
         rows.push({ name, date: dateStr, type });
@@ -6070,8 +6110,9 @@ init().then(async () => {
   app.get('/leave-calendar', authRequired, managerOnly, async (req, res) => {
     await db.read();
     const { start, end } = req.query;
-    const startDate = start ? new Date(start) : null;
-    const endDate = end ? new Date(end) : null;
+    const activeRange = getActiveLeaveReportRange(db.data.settings || {});
+    const startDate = start ? new Date(start) : activeRange.startDate;
+    const endDate = end ? new Date(end) : activeRange.endDate;
     const emps = db.data.employees || [];
     const apps = (db.data.applications || []).filter(a => a.status === 'approved');
     const map = {};

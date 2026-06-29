@@ -197,3 +197,22 @@ test('Negative balance limits are configured per leave type', () => {
   assert.equal(getNegativeBalanceLimit('medical'), 2);
   assert.equal(getNegativeBalanceLimit('casual'), 1);
 });
+
+test('Manual reset active cycle ignores prior cycle leave records', () => {
+  const asOfDate = new Date('2026-06-29');
+  const cycleRange = getCurrentCycleRange(asOfDate, {
+    durationMonths: 12,
+    activeCycleStart: new Date('2026-06-01'),
+    activeCycleEnd: new Date('2027-05-31')
+  });
+  const employee = createEmployee(new Date('2020-01-01'));
+  const apps = [
+    leaveApplication(employee.id, 'annual', '2026-05-20', '2026-05-21'),
+    leaveApplication(employee.id, 'annual', '2026-06-15', '2026-06-15')
+  ];
+
+  const { balances } = buildEmployeeLeaveState(employee, apps, { cycleRange, asOfDate, holidays: [] });
+
+  assert.equal(cycleRange.start.toISOString().slice(0, 10), '2026-06-01');
+  assert.equal(balances.annual.taken, 1);
+});

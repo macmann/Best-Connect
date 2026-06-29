@@ -26,11 +26,25 @@ function normalizeCycleDurationMonths(value) {
     : DEFAULT_LEAVE_CYCLE_DURATION_MONTHS;
 }
 
+function parseCycleBoundary(value, endOfDay = false) {
+  if (!value) return null;
+  const date = value instanceof Date ? new Date(value) : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setHours(endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+  return date;
+}
+
 function getLeaveCycleSettings(settings = {}) {
   const source = settings?.leaveCycle && typeof settings.leaveCycle === 'object'
     ? settings.leaveCycle
     : settings;
-  return { durationMonths: normalizeCycleDurationMonths(source?.durationMonths) };
+  const activeCycleStart = parseCycleBoundary(source?.activeCycleStart || source?.cycleStart);
+  const activeCycleEnd = parseCycleBoundary(source?.activeCycleEnd || source?.cycleEnd, true);
+  return {
+    durationMonths: normalizeCycleDurationMonths(source?.durationMonths),
+    activeCycleStart,
+    activeCycleEnd
+  };
 }
 
 function getEmployeeEntitlement(employee, type) {
@@ -111,6 +125,16 @@ function startOfDay(date) {
 
 function getCurrentCycleRange(now = new Date(), options = {}) {
   const base = new Date(now);
+  const activeCycleStart = typeof options === 'object' ? parseCycleBoundary(options?.activeCycleStart || options?.cycleStart) : null;
+  const activeCycleEnd = typeof options === 'object' ? parseCycleBoundary(options?.activeCycleEnd || options?.cycleEnd, true) : null;
+  if (activeCycleStart && activeCycleEnd && activeCycleEnd >= activeCycleStart && base >= activeCycleStart && base <= activeCycleEnd) {
+    const durationMonths = Math.max(1, Math.round(
+      (activeCycleEnd.getFullYear() - activeCycleStart.getFullYear()) * 12 +
+      (activeCycleEnd.getMonth() - activeCycleStart.getMonth()) + 1
+    ));
+    return { start: activeCycleStart, end: activeCycleEnd, durationMonths };
+  }
+
   const durationMonths = normalizeCycleDurationMonths(
     typeof options === 'number' ? options : options?.durationMonths
   );
