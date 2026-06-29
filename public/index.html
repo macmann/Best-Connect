@@ -7394,7 +7394,7 @@
           <button type="button" class="settings-subtab-button settings-subtab-button--active" data-settings-tab="organization" role="tab" aria-selected="true">Organization</button>
           <button type="button" class="settings-subtab-button" data-settings-tab="holidays" role="tab" aria-selected="false">Holiday Calendar</button>
           <button type="button" class="settings-subtab-button" data-settings-tab="leaveCycle" role="tab" aria-selected="false">Leave Cycle</button>
-          <button type="button" class="settings-subtab-button" data-settings-tab="resetLeave" role="tab" aria-selected="false">Rest</button>
+          <button type="button" class="settings-subtab-button" data-settings-tab="resetLeave" role="tab" aria-selected="false">Reset</button>
           <button type="button" class="settings-subtab-button" data-settings-tab="ai" role="tab" aria-selected="false">AI Configuration</button>
           <button type="button" id="roleAssignmentTab" class="settings-subtab-button hidden" data-settings-tab="roleAssignments" role="tab" aria-selected="false">Role Assignments</button>
           <button type="button" class="settings-subtab-button" data-settings-tab="chatWidget" role="tab" aria-selected="false">Chat Widget</button>
@@ -7555,6 +7555,13 @@
                 Reset leave balances
               </button>
             </form>
+            <div class="settings-form__fields settings-form__fields--full">
+              <div class="settings-form__help">If old leave rows are still showing non-zero taken values after a reset, clear the leave table to remove historical leave applications and force all employee leave balances to 0 / 0 / 0.</div>
+            </div>
+            <button type="button" id="cleanLeaveTableBtn" class="md-button md-button--outlined md-button--small settings-form__submit">
+              <span class="material-symbols-rounded">delete_sweep</span>
+              Clean leave table for reset
+            </button>
             <div id="resetLeaveSettingsStatus" class="settings-status text-muted"></div>
           </div>
         </div>

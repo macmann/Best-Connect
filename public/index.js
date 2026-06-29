@@ -8680,6 +8680,30 @@ async function onResetLeaveSettingsSubmit(ev) {
   }
 }
 
+async function onCleanLeaveTableForReset() {
+  if (!currentUser || !isManagerRole(currentUser)) return;
+  const button = document.getElementById('cleanLeaveTableBtn');
+  const confirmed = window.confirm('This will permanently delete all leave application rows and set annual, casual, and medical balances/taken/accrued values to 0 for every employee. Continue?');
+  if (!confirmed) {
+    setResetLeaveSettingsStatus('Clean leave table cancelled.');
+    return;
+  }
+  if (button) button.disabled = true;
+  try {
+    setResetLeaveSettingsStatus('Cleaning leave table for reset...');
+    const res = await apiFetch('/settings/leave/reset/clean-table', { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Unable to clean leave table.');
+    setResetLeaveSettingsStatus(`Leave table cleaned. Removed ${data.removedApplications || 0} leave rows and reset ${data.updatedEmployees || 0} employees to 0 / 0 / 0.`, 'success');
+    if (typeof loadEmployeeSelect === 'function') loadEmployeeSelect();
+  } catch (err) {
+    console.error('Failed to clean leave table for reset', err);
+    setResetLeaveSettingsStatus(err.message || 'Unable to clean leave table.', 'error');
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 function setChatWidgetSettingsStatus(message, type = 'info') {
   const statusEl = document.getElementById('chatWidgetSettingsStatus');
   if (!statusEl) return;
@@ -11423,6 +11447,8 @@ async function init() {
   if (leaveCycleForm) leaveCycleForm.addEventListener('submit', onLeaveCycleSettingsSubmit);
   const resetLeaveForm = document.getElementById('resetLeaveSettingsForm');
   if (resetLeaveForm) resetLeaveForm.addEventListener('submit', onResetLeaveSettingsSubmit);
+  const cleanLeaveTableBtn = document.getElementById('cleanLeaveTableBtn');
+  if (cleanLeaveTableBtn) cleanLeaveTableBtn.addEventListener('click', onCleanLeaveTableForReset);
   const organizationLogoInput = document.getElementById('organizationLogoFile');
   if (organizationLogoInput) organizationLogoInput.addEventListener('change', onOrganizationLogoFileChange);
 
