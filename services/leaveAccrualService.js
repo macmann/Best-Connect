@@ -151,6 +151,36 @@ function getCurrentCycleRange(now = new Date(), options = {}) {
   return { start, end, durationMonths };
 }
 
+
+function parseDateValue(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? new Date(value) : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getFirstDayOfNextMonth(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+  return new Date(date.getFullYear(), date.getMonth() + 1, 1);
+}
+
+function getApplicationCreatedDate(app) {
+  const created = parseDateValue(app?.createdAt || app?.submittedAt || app?.requestedAt);
+  if (created) return created;
+  const numericId = Number(app?.id);
+  if (Number.isFinite(numericId) && numericId > 946684800000) {
+    const fromId = new Date(numericId);
+    if (!Number.isNaN(fromId.getTime())) return fromId;
+  }
+  return null;
+}
+
+function isApplicationBeforeManualReset(app, manualResetAt) {
+  const resetDate = parseDateValue(manualResetAt);
+  if (!resetDate) return false;
+  const createdDate = getApplicationCreatedDate(app);
+  return !createdDate || createdDate < resetDate;
+}
+
 function getMonthStart(date) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 }
@@ -395,7 +425,7 @@ function getLeaveDaysWithin(app, startDate, endDate, holidaySet = new Set()) {
   return days;
 }
 
-function calculateLeaveTakenForEmployee(employeeId, applications, cycleRange, asOfDate, holidays) {
+function calculateLeaveTakenForEmployee(employeeId, applications, cycleRange, asOfDate, holidays, options = {}) {
   const totals = { annual: 0, casual: 0, medical: 0 };
   if (!Array.isArray(applications)) return totals;
 
@@ -410,6 +440,7 @@ function calculateLeaveTakenForEmployee(employeeId, applications, cycleRange, as
 
   applications.forEach(app => {
     if (!app || app.employeeId != employeeId) return;
+    if (isApplicationBeforeManualReset(app, options.manualResetAt)) return;
     const status = String(app.status || '').toLowerCase();
     if (status !== 'approved') return;
     const leaveType = String(app.type || '').toLowerCase();
@@ -433,13 +464,20 @@ function buildEmployeeLeaveState(employee, applications, options = {}) {
   const cycleRange = options.cycleRange || getCurrentCycleRange(asOfDate, settings);
   const holidays = options.holidays || [];
 
-  const accrued = calculateAccruedLeaveForEmployee(employee, cycleRange, asOfDate);
+  const manualResetAt = parseDateValue(employee?.leaveBalances?.lastManualResetAt);
+  const accrualResumeDate = getFirstDayOfNextMonth(manualResetAt);
+  const accrualCycleRange = accrualResumeDate && accrualResumeDate > cycleRange.start
+    ? { ...cycleRange, start: accrualResumeDate }
+    : cycleRange;
+
+  const accrued = calculateAccruedLeaveForEmployee(employee, accrualCycleRange, asOfDate);
   const taken = calculateLeaveTakenForEmployee(
     employee?.id,
     applications,
     cycleRange,
     asOfDate,
-    holidays
+    holidays,
+    { manualResetAt }
   );
 
   const balances = cloneDefaultLeaveBalances();
@@ -468,6 +506,9 @@ function buildEmployeeLeaveState(employee, applications, options = {}) {
   balances.cycleStart = cycleRange.start;
   balances.cycleEnd = cycleRange.end;
   balances.lastAccrualRun = asOfDate;
+  if (manualResetAt) {
+    balances.lastManualResetAt = manualResetAt.toISOString();
+  }
   balances.cycleDurationMonths = cycleRange.durationMonths || settings.durationMonths;
 
   return { balances, accrued, taken, cycleRange };
