@@ -1216,6 +1216,8 @@ const settingsSubtabButtons = document.querySelectorAll('[data-settings-tab]');
 const settingsSubtabPanels = {
   organization: document.querySelector('[data-settings-tab-panel="organization"]'),
   holidays: document.querySelector('[data-settings-tab-panel="holidays"]'),
+  leaveCycle: document.querySelector('[data-settings-tab-panel="leaveCycle"]'),
+  resetLeave: document.querySelector('[data-settings-tab-panel="resetLeave"]'),
   ai: document.querySelector('[data-settings-tab-panel="ai"]'),
   roleAssignments: document.querySelector('[data-settings-tab-panel="roleAssignments"]'),
   chatWidget: document.querySelector('[data-settings-tab-panel="chatWidget"]'),
@@ -5766,6 +5768,7 @@ function loadSettingsSubtabData(name) {
   if (name === 'organization') loadOrganizationSettings();
   if (name === 'holidays') loadHolidays();
   if (name === 'leaveCycle') loadLeaveCycleSettings();
+  if (name === 'resetLeave') loadResetLeaveSettings();
   if (name === 'ai') loadAiSettingsConfig();
   if (name === 'chatWidget') loadChatWidgetSettings();
   if (name === 'postLogin') loadPostLoginSettings();
@@ -8555,6 +8558,128 @@ async function onLeaveCycleSettingsSubmit(ev) {
   }
 }
 
+
+function setResetLeaveSettingsStatus(message, type = 'info') {
+  const statusEl = document.getElementById('resetLeaveSettingsStatus');
+  if (!statusEl) return;
+  statusEl.textContent = message || '';
+  statusEl.classList.remove('settings-status--error', 'settings-status--success');
+  if (!message) {
+    statusEl.classList.add('text-muted');
+    return;
+  }
+  statusEl.classList.remove('text-muted');
+  if (type === 'error') statusEl.classList.add('settings-status--error');
+  if (type === 'success') statusEl.classList.add('settings-status--success');
+}
+
+function formatDateInputValue(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+}
+
+function renderResetLeaveDefaults() {
+  const startInput = document.getElementById('resetLeaveStartDate');
+  const endInput = document.getElementById('resetLeaveEndDate');
+  const annualInput = document.getElementById('resetLeaveAnnualDefault');
+  const casualInput = document.getElementById('resetLeaveCasualDefault');
+  const medicalInput = document.getElementById('resetLeaveMedicalDefault');
+  const now = new Date();
+  const duration = Number(leaveCycleSettings?.durationMonths || 12);
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + (duration === 6 ? 6 : 12));
+  end.setDate(end.getDate() - 1);
+  if (startInput && !startInput.value) startInput.value = formatDateInputValue(start);
+  if (endInput && !endInput.value) endInput.value = formatDateInputValue(end);
+  if (annualInput && !annualInput.value) annualInput.value = '12';
+  if (casualInput && !casualInput.value) casualInput.value = '6';
+  if (medicalInput && !medicalInput.value) medicalInput.value = '12';
+}
+
+async function loadResetLeaveSettings() {
+  if (!currentUser || !isManagerRole(currentUser)) return;
+  await loadLeaveCycleSettings({ silent: true });
+  renderResetLeaveDefaults();
+}
+
+function getResetLeavePayload() {
+  return {
+    startDate: document.getElementById('resetLeaveStartDate')?.value || '',
+    endDate: document.getElementById('resetLeaveEndDate')?.value || '',
+    defaults: {
+      annual: Number(document.getElementById('resetLeaveAnnualDefault')?.value || 0),
+      casual: Number(document.getElementById('resetLeaveCasualDefault')?.value || 0),
+      medical: Number(document.getElementById('resetLeaveMedicalDefault')?.value || 0)
+    }
+  };
+}
+
+async function downloadLeaveResetExcel(payload) {
+  const params = new URLSearchParams();
+  if (payload.startDate) params.set('startDate', payload.startDate);
+  if (payload.endDate) params.set('endDate', payload.endDate);
+  const res = await apiFetch(`/settings/leave/reset/export.xls?${params.toString()}`);
+  const blob = await res.blob();
+  if (!res.ok) {
+    const message = await blob.text().catch(() => 'Unable to download leave status export.');
+    throw new Error(message || 'Unable to download leave status export.');
+  }
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `leave-status-before-reset-${new Date().toISOString().slice(0, 10)}.xls`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function onResetLeaveSettingsSubmit(ev) {
+  ev.preventDefault();
+  if (!currentUser || !isManagerRole(currentUser)) return;
+  const form = ev.currentTarget;
+  const submitBtn = form?.querySelector('button[type="submit"]');
+  const payload = getResetLeavePayload();
+  if (!payload.startDate || !payload.endDate) {
+    setResetLeaveSettingsStatus('Start and end dates are required.', 'error');
+    return;
+  }
+  if (new Date(payload.endDate) < new Date(payload.startDate)) {
+    setResetLeaveSettingsStatus('End date cannot be before start date.', 'error');
+    return;
+  }
+  const shouldDownload = window.confirm('Before resetting, download the current leave status in Excel? Choose OK to download, or Cancel to continue without downloading.');
+  if (submitBtn) submitBtn.disabled = true;
+  try {
+    if (shouldDownload) {
+      setResetLeaveSettingsStatus('Preparing Excel download...');
+      await downloadLeaveResetExcel(payload);
+    }
+    const confirmed = window.confirm('This will reset leave balances for all employees for the new round. Continue?');
+    if (!confirmed) {
+      setResetLeaveSettingsStatus('Reset cancelled.');
+      return;
+    }
+    setResetLeaveSettingsStatus('Resetting leave balances...');
+    const res = await apiFetch('/settings/leave/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Unable to reset leave balances.');
+    setResetLeaveSettingsStatus(`Leave reset complete. Updated ${data.updated || 0} of ${data.processed || 0} employees.`, 'success');
+    if (typeof loadEmployeeSelect === 'function') loadEmployeeSelect();
+  } catch (err) {
+    console.error('Failed to reset leave balances', err);
+    setResetLeaveSettingsStatus(err.message || 'Unable to reset leave balances.', 'error');
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
 function setChatWidgetSettingsStatus(message, type = 'info') {
   const statusEl = document.getElementById('chatWidgetSettingsStatus');
   if (!statusEl) return;
@@ -11296,6 +11421,8 @@ async function init() {
   if (organizationForm) organizationForm.addEventListener('submit', onOrganizationSettingsSubmit);
   const leaveCycleForm = document.getElementById('leaveCycleSettingsForm');
   if (leaveCycleForm) leaveCycleForm.addEventListener('submit', onLeaveCycleSettingsSubmit);
+  const resetLeaveForm = document.getElementById('resetLeaveSettingsForm');
+  if (resetLeaveForm) resetLeaveForm.addEventListener('submit', onResetLeaveSettingsSubmit);
   const organizationLogoInput = document.getElementById('organizationLogoFile');
   if (organizationLogoInput) organizationLogoInput.addEventListener('change', onOrganizationLogoFileChange);
 
