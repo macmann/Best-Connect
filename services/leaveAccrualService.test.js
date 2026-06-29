@@ -131,6 +131,53 @@ test('Negative balances are produced when leave exceeds accrual', () => {
   assert(balances.annual.balance < 0);
 });
 
+
+test('Manual reset keeps balances at zero until the next accrual month and ignores prior applications', () => {
+  const asOfDate = new Date('2025-06-15T12:00:00Z');
+  const resetAt = new Date('2025-06-15T10:00:00Z').toISOString();
+  const employee = {
+    ...createEmployee(new Date('2020-01-01')),
+    leaveBalances: {
+      annual: { ...DEFAULT_LEAVE_BALANCES.annual, balance: 0, accrued: 0, taken: 0 },
+      casual: { ...DEFAULT_LEAVE_BALANCES.casual, balance: 0, accrued: 0, taken: 0 },
+      medical: { ...DEFAULT_LEAVE_BALANCES.medical, balance: 0, accrued: 0, taken: 0 },
+      lastManualResetAt: resetAt
+    }
+  };
+  const apps = [
+    { ...leaveApplication(employee.id, 'annual', '2025-06-10', '2025-06-11'), createdAt: '2025-06-14T09:00:00Z' },
+    { ...leaveApplication(employee.id, 'casual', '2025-06-12', '2025-06-12'), id: Date.parse('2025-06-14T09:00:00Z') }
+  ];
+
+  const balances = runState(employee, apps, asOfDate);
+
+  assert.equal(balances.annual.balance, 0);
+  assert.equal(balances.casual.balance, 0);
+  assert.equal(balances.medical.balance, 0);
+  assert.equal(balances.annual.taken, 0);
+  assert.equal(balances.lastManualResetAt, resetAt);
+});
+
+test('Applications submitted after a manual reset are deducted', () => {
+  const asOfDate = new Date('2025-07-31T12:00:00Z');
+  const resetAt = new Date('2025-06-15T10:00:00Z').toISOString();
+  const employee = {
+    ...createEmployee(new Date('2020-01-01')),
+    leaveBalances: {
+      annual: { ...DEFAULT_LEAVE_BALANCES.annual, balance: 0, accrued: 0, taken: 0 },
+      lastManualResetAt: resetAt
+    }
+  };
+  const apps = [
+    { ...leaveApplication(employee.id, 'annual', '2025-07-03', '2025-07-03'), createdAt: '2025-06-16T09:00:00Z' }
+  ];
+
+  const balances = runState(employee, apps, asOfDate);
+
+  assert.equal(balances.annual.taken, 1);
+  assert.equal(balances.annual.balance, roundToOneDecimal((10 / 12) - 1));
+});
+
 test('Recalculation is idempotent for the same inputs', () => {
   const asOfDate = new Date('2025-06-30');
   const employee = createEmployee(new Date('2024-07-01'));

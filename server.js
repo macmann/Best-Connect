@@ -5464,12 +5464,13 @@ init().then(async () => {
         (parsed.endDate.getFullYear() - parsed.startDate.getFullYear()) * 12 +
         (parsed.endDate.getMonth() - parsed.startDate.getMonth()) + 1
       ));
+      const resetTimestamp = new Date().toISOString();
       db.data.settings.leaveCycle = {
         ...previousLeaveCycle,
         durationMonths: normalizeCycleDurationMonths(cycleDurationMonths),
         activeCycleStart: parsed.startDate,
         activeCycleEnd: parsed.endDate,
-        lastManualResetAt: new Date().toISOString()
+        lastManualResetAt: resetTimestamp
       };
       db.data.employees = Array.isArray(db.data.employees) ? db.data.employees : [];
       let updated = 0;
@@ -5490,6 +5491,7 @@ init().then(async () => {
         balances.cycleStart = parsed.startDate;
         balances.cycleEnd = parsed.endDate;
         balances.lastAccrualRun = null;
+        balances.lastManualResetAt = resetTimestamp;
         balances.cycleDurationMonths = cycleDurationMonths;
         const changed = JSON.stringify(emp.leaveBalances || {}) !== JSON.stringify(balances);
         emp.leaveBalances = balances;
@@ -6679,7 +6681,8 @@ init().then(async () => {
       from: normalizedFrom,
       to: normalizedTo,
       reason: reason || '',
-      status: 'pending'
+      status: 'pending',
+      createdAt: new Date().toISOString()
     };
 
     if (halfDay) {
