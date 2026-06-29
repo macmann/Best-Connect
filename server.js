@@ -5402,6 +5402,53 @@ init().then(async () => {
     return `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Current Balances"><Table>${summaryRows.join('')}</Table></Worksheet><Worksheet ss:Name="Leave History"><Table>${historyRows.join('')}</Table></Worksheet></Workbook>`;
   }
 
+  function cleanLeaveTableForResetData(data) {
+    data.applications = Array.isArray(data.applications) ? data.applications : [];
+    data.employees = Array.isArray(data.employees) ? data.employees : [];
+
+    const removedApplications = data.applications.length;
+    data.applications = [];
+
+    let updatedEmployees = 0;
+    const resetTimestamp = new Date().toISOString();
+    data.employees.forEach(emp => {
+      if (!emp || typeof emp !== 'object') return;
+      const balances = cloneDefaultLeaveBalances();
+      SUPPORTED_LEAVE_TYPES.forEach(type => {
+        const previous = emp.leaveBalances?.[type] && typeof emp.leaveBalances[type] === 'object'
+          ? emp.leaveBalances[type]
+          : {};
+        const yearlyAllocation = Number.isFinite(Number(previous.yearlyAllocation))
+          ? Number(previous.yearlyAllocation)
+          : DEFAULT_LEAVE_BALANCES[type].yearlyAllocation;
+        balances[type] = {
+          ...DEFAULT_LEAVE_BALANCES[type],
+          yearlyAllocation,
+          monthlyAccrual: yearlyAllocation / 12,
+          accrued: 0,
+          taken: 0,
+          balance: 0,
+          manualAdjustment: 0
+        };
+      });
+      balances.cycleStart = emp.leaveBalances?.cycleStart || null;
+      balances.cycleEnd = emp.leaveBalances?.cycleEnd || null;
+      balances.lastAccrualRun = null;
+      balances.lastManualResetAt = resetTimestamp;
+      balances.cycleDurationMonths = emp.leaveBalances?.cycleDurationMonths || getLeaveCycleSettings(data.settings?.leaveCycle).durationMonths;
+      const changed = JSON.stringify(emp.leaveBalances || {}) !== JSON.stringify(balances);
+      emp.leaveBalances = balances;
+      if (changed) updatedEmployees += 1;
+    });
+
+    data.settings = data.settings && typeof data.settings === 'object' ? data.settings : {};
+    data.settings.leaveCycle = data.settings.leaveCycle && typeof data.settings.leaveCycle === 'object'
+      ? { ...data.settings.leaveCycle, lastManualResetAt: resetTimestamp }
+      : { lastManualResetAt: resetTimestamp };
+
+    return { removedApplications, updatedEmployees, processedEmployees: data.employees.length, resetTimestamp };
+  }
+
   app.put('/settings/leave', authRequired, managerOnly, async (req, res) => {
     try {
       const requestedDuration = Number(req.body?.durationMonths);
@@ -5502,6 +5549,18 @@ init().then(async () => {
     } catch (err) {
       console.error('Failed to reset leave balances', err);
       res.status(500).json({ error: 'Unable to reset leave balances.' });
+    }
+  });
+
+  app.post('/settings/leave/reset/clean-table', authRequired, managerOnly, async (_req, res) => {
+    try {
+      await db.read();
+      const result = cleanLeaveTableForResetData(db.data);
+      await db.write();
+      res.json(result);
+    } catch (err) {
+      console.error('Failed to clean leave table for reset', err);
+      res.status(500).json({ error: 'Unable to clean leave table.' });
     }
   });
 
