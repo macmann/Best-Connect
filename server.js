@@ -3080,7 +3080,7 @@ async function authRequired(req, res, next) {
   const token = resolveToken(req);
   const user = await resolveUserFromSession(token);
   if (user) {
-    if (!isManagerRole(user.role)) {
+    if (user.employeeId !== null && typeof user.employeeId !== 'undefined') {
       const employees = Array.isArray(db.data.employees) ? db.data.employees : [];
       const emp = employees.find(e => e.id == user.employeeId);
       if (!isEmployeeActive(emp)) {
@@ -3199,6 +3199,11 @@ init().then(async () => {
       let user = db.data.users?.find(u => u.email === email);
       let userObj;
       if (user) {
+        const employees = Array.isArray(db.data.employees) ? db.data.employees : [];
+        const emp = employees.find(e => e.id == user.employeeId);
+        if (!isEmployeeActive(emp)) {
+          return res.status(403).send('Employee account is inactive');
+        }
         userObj = { id: user.id, email: user.email, role: user.role, employeeId: user.employeeId };
       } else if (email === ADMIN_EMAIL) {
         userObj = { id: 'admin', email: ADMIN_EMAIL, role: 'superadmin', employeeId: null };
@@ -3444,12 +3449,10 @@ init().then(async () => {
 
     let userObj;
     if (user) {
-      if (!isManagerRole(user.role)) {
-        const employees = Array.isArray(db.data.employees) ? db.data.employees : [];
-        const emp = employees.find(e => e.id == user.employeeId);
-        if (!isEmployeeActive(emp)) {
-          return res.status(403).json({ error: 'Employee account is inactive' });
-        }
+      const employees = Array.isArray(db.data.employees) ? db.data.employees : [];
+      const emp = employees.find(e => e.id == user.employeeId);
+      if (!isEmployeeActive(emp)) {
+        return res.status(403).json({ error: 'Employee account is inactive' });
       }
       userObj = {
         id: user.id,

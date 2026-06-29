@@ -11823,9 +11823,10 @@ async function getJSON(path) {
 
 async function loadEmployeesPortal() {
   const emps = await getJSON('/employees');
-  let filteredEmps = emps;
+  const activeEmps = Array.isArray(emps) ? emps.filter(isEmployeeActive) : [];
+  let filteredEmps = activeEmps;
   if (currentUser && !isManagerRole(currentUser)) {
-    filteredEmps = emps.filter(e => e.id == currentUser.employeeId);
+    filteredEmps = activeEmps.filter(e => e.id == currentUser.employeeId);
   }
   ['employeeSelect', 'reportSelect'].forEach(id => {
     const sel = document.getElementById(id);
