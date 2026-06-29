@@ -57,7 +57,6 @@ const {
 } = require('./services/learningRoleAssignmentService');
 const { getUploadsRoot } = require('./utils/uploadPaths');
 const {
-  computeAllLeaveBalances,
   getCurrentLeaveCycle: getCurrentLeaveCycleInfo,
   DEFAULT_ENTITLEMENTS
 } = require('./utils/leaveAccrual');
@@ -1774,7 +1773,12 @@ function refreshEmployeeLeaveBalances(employee, data, options = {}) {
 function formatLeaveBalancesForResponse(balances, { dateNow = new Date(), settings } = {}) {
   const cycle = getCurrentLeaveCycleInfo(dateNow, settings);
   const toEntry = (entry = {}, defaultEntitlement = 0) => {
-    const entitlement = Number.isFinite(entry?.entitlement) ? entry.entitlement : defaultEntitlement;
+    const yearlyAllocation = Number(entry?.yearlyAllocation);
+    const entitlement = Number.isFinite(entry?.entitlement)
+      ? entry.entitlement
+      : Number.isFinite(yearlyAllocation)
+        ? yearlyAllocation
+        : defaultEntitlement;
     const earned = roundToOneDecimal(entry?.earned || entry?.accrued || 0);
     const adjustment = roundToOneDecimal(entry?.manualAdjustment ?? entry?.adjustment ?? 0);
     return {
@@ -1803,11 +1807,14 @@ function formatLeaveBalancesForResponse(balances, { dateNow = new Date(), settin
 async function getComputedLeaveBalances(employee, options = {}) {
   if (!employee) return { raw: null, formatted: null };
   const dateNow = options.dateNow instanceof Date ? options.dateNow : new Date();
-  const balances = await computeAllLeaveBalances(employee, {
-    dateNow,
-    applications: options.applications || (db.data && db.data.applications),
-    holidays: options.holidays || (db.data && db.data.holidays),
-    settings: options.settings || (db.data && db.data.settings)
+  const settings = options.settings || (db.data && db.data.settings) || {};
+  const cycleSettings = getLeaveCycleSettings(settings);
+  const cycleRange = options.cycleRange || getCurrentCycleRange(dateNow, cycleSettings);
+  const { balances } = buildEmployeeLeaveState(employee, options.applications || (db.data && db.data.applications) || [], {
+    asOfDate: dateNow,
+    cycleRange,
+    holidays: options.holidays || (db.data && db.data.holidays) || [],
+    settings: cycleSettings
   });
 
   return {
