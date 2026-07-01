@@ -229,6 +229,17 @@ test('Normalization caps stored balances and accrued values at allocations', () 
 });
 
 
+
+test('Cycle start immediately grants the first monthly leave increment', () => {
+  const asOfDate = new Date('2026-07-01T00:10:00Z');
+  const employee = createEmployee(new Date('2020-01-01'));
+  const balances = runState(employee, [], asOfDate);
+
+  assert.equal(balances.annual.balance, roundToOneDecimal(10 / 12));
+  assert.equal(balances.casual.balance, roundToOneDecimal(5 / 12));
+  assert.equal(balances.medical.balance, roundToOneDecimal(14 / 12));
+});
+
 test('Six month leave cycles use Jan-Jun and Jul-Dec boundaries', () => {
   const firstHalf = getCurrentCycleRange(new Date('2026-03-15'), { durationMonths: 6 });
   assert.equal(firstHalf.start.toISOString().slice(0, 10), '2026-01-01');

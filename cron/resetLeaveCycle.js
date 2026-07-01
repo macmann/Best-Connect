@@ -57,7 +57,7 @@ async function resetLeaveCycle(now = new Date()) {
   return { processed: employees.length, updated: updatedCount };
 }
 
-const resetLeaveCycleJob = cron.schedule('0 1 1 1,7 *', async () => {
+const resetLeaveCycleJob = cron.schedule('0 0 1 1,7 *', async () => {
   console.log('[CRON] Starting leave cycle reset job');
   try {
     const result = await resetLeaveCycle();
