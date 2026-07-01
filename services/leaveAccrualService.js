@@ -336,7 +336,15 @@ function listAccrualMonths(window, asOfDate) {
     const monthEnd = getMonthEnd(cursor);
     const activeStart = cursor < window.effectiveStart ? window.effectiveStart : cursor;
     const activeEnd = monthEnd > window.effectiveEnd ? window.effectiveEnd : monthEnd;
-    const accrualBoundary = monthEnd < accrualEnd ? monthEnd : accrualEnd;
+    const isMonthlyAccrualDate =
+      cutoffDate.getDate() === 1 &&
+      cursor.getFullYear() === cutoffDate.getFullYear() &&
+      cursor.getMonth() === cutoffDate.getMonth();
+    const accrualBoundary = isMonthlyAccrualDate
+      ? monthEnd
+      : monthEnd < accrualEnd
+        ? monthEnd
+        : accrualEnd;
 
     if (accrualBoundary >= activeStart) {
       const boundedEnd = activeEnd < accrualBoundary ? activeEnd : accrualBoundary;
